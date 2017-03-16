@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os/exec"
+	"strconv"
 
 	pb "github.com/taylorflatt/go-chat"
 	"golang.org/x/net/context"
@@ -41,6 +42,11 @@ func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Res
 	var port = in.Port
 	clients[ip] = port
 
+	log.Println("Registered " + ip + ":" + strconv.Itoa(int(port)))
+
+	log.Print("Current Clients: ")
+	log.Print(clients)
+
 	return &pb.Response{}, nil
 }
 
@@ -58,11 +64,13 @@ func (s *server) GetClientList(ctx context.Context, in *pb.List) (*pb.ClientList
 
 	// List of just the IPs.
 	var cIps []string
-	for key := range clients {
+	var cPorts []int32
+	for key, value := range clients {
 		cIps = append(cIps, key)
+		cPorts = append(cPorts, value)
 	}
 
-	return &pb.ClientList{Ip: cIps}, nil
+	return &pb.ClientList{Ip: cIps, Port: cPorts}, nil
 }
 
 func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {

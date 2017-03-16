@@ -30,12 +30,14 @@ message ClientInfo {
     int32 port = 2;
 }
 
+
 message RegistrationReply {
     string response = 1;
 }
 
 message ClientList {
     repeated string ip = 1;
+    repeated int32 port = 2;
 }
 
 message RouteMessage {

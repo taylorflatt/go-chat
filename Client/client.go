@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	pb "github.com/taylorflatt/go-chat"
 	"golang.org/x/net/context"
@@ -16,22 +18,51 @@ import (
 // The IP is hardcoded now. But eventually it will not be.
 // Will need to reference Interfaces().
 const (
-	ip   = "localhost"
-	port = 12021
+	ip = "localhost"
+	//port = 12021
 )
 
+func randInt32(min int32, max int32) int32 {
+	rand.Seed(time.Now().Unix())
+	return min + rand.Int31n(max-min)
+}
+
 func SingleChat(c pb.ChatClient, r *bufio.Reader) {
+
 	fmt.Printf("Connectable clients: \n")
+	var ips []string
+	var ports []int32
+
 	res, err := c.GetClientList(context.Background(), &pb.List{})
+
 	if err != nil {
 		log.Fatalf("Failed to get list of clients: %v", err)
 	} else {
-		// TODO: Split up into individual items so they can be formatted nicely.
-		fmt.Println(res)
+		if res.Ip != nil {
+			ips = res.Ip
+			ports = res.Port
+
+			// TODO: Remove the current client's IP from the list of clients connected.
+			for i := range ips {
+				// TODO: Rewrite to a custom function for quicker conversion.
+				fmt.Println(strconv.Itoa(i+1) + ") " + ips[i] + ":" + strconv.Itoa(int(ports[i])))
+			}
+		} else {
+			fmt.Println("There are currently no clients.")
+		}
 	}
 
 	fmt.Printf("\nPlease enter the name of the client to whom you wish to connect as it appears above: ")
 	client, _ := r.ReadString('\n')
+	t := strings.TrimSpace(client)
+	ts := strings.Split(t, ":")
+	cIP := ts[0]
+
+	// Type cast from string to int to int32.
+	// TODO: Clean this up.
+	tc, _ := strconv.Atoi(ts[1])
+	var cPort int32
+	cPort = int32(tc)
 
 	stream, err := c.RouteChat(context.Background())
 	waitc := make(chan struct{})
@@ -42,7 +73,7 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 		fmt.Printf("You: ")
 		m, _ := r.ReadString('\n')
 		if m == "\\exit" {
-			c.UnRegisterClient(context.Background(), &pb.ClientInfo{Ip: ip, Port: port})
+			c.UnRegisterClient(context.Background(), &pb.ClientInfo{Ip: cIP, Port: cPort})
 			break
 		} else {
 			msg := &pb.RouteMessage{Ip: client, Message: m}
@@ -58,14 +89,25 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 }
 
 func main() {
+
+	// TODO: Create server function to make sure that the port generated isn't already
+	// registered with the server.
+	// Generate unique port.
+	port := randInt32(10000, 15000)
+	fmt.Println("Your port: " + strconv.Itoa(int(port)))
+
 	// Read in the user's command.
 	r := bufio.NewReader(os.Stdin)
 
 	// Read the server address
 	fmt.Print("Please specify the server IP: ")
-	address, _ := r.ReadString('\n')
-	address = strings.TrimSpace(address)
-	address = address + ":" + strconv.Itoa(port)
+	t, _ := r.ReadString('\n')
+	t = strings.TrimSpace(t)
+	ts := strings.Split(t, ":")
+	sip := ts[0]
+	sport := ts[1]
+
+	address := sip + ":" + sport
 
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
