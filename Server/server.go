@@ -34,16 +34,6 @@ func executeCommand(commandName string, commandArgs []string) string {
 	return output
 }
 
-// This function executes the client's shell command and returns the results.
-func (s *server) SendCommand(ctx context.Context, in *pb.CommandRequest) (*pb.CommandReply, error) {
-
-	var cmdName = in.CmdName
-	var cmdArgs = in.CmdArgs
-	var output = executeCommand(cmdName, cmdArgs)
-
-	return &pb.CommandReply{Output: output}, nil
-}
-
 // Registers the client with the server as available to talk.
 func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Response, error) {
 
@@ -85,6 +75,10 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		if err != nil {
 			return err
 		}
+
+		log.Print(in.Ip + " sent " + in.Message)
+
+		stream.Send(in)
 	}
 }
 
