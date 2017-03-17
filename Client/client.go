@@ -28,10 +28,54 @@ func RandInt32(min int32, max int32) int32 {
 	return min + rand.Int31n(max-min)
 }
 
+func MainMenu() {
+	addSpacing(1)
+	fmt.Println("Welcome to Go-Chat!")
+	addSpacing(1)
+	fmt.Println("Below is a list of menu options for the chat application.")
+	addSpacing(2)
+	fmt.Println("1) Create a Group")
+	fmt.Println("2) View Group List")
+	fmt.Println("3) Exit Chat")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func GroupMenu() {
+	addSpacing(1)
+	fmt.Println("View Groups Menu")
+	addSpacing(1)
+	fmt.Println("Below is a list of menu options for groups.")
+	addSpacing(1)
+	fmt.Println("1) Join a Group")
+	fmt.Println("2) View Group Members")
+	fmt.Println("3) Refresh Group List")
+	fmt.Println("4) Go back")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func ViewGroupMembersMenu() {
+	addSpacing(1)
+	fmt.Println("Enter the group name that you would like to view! Enter !back to go back to the menu.")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func CheckError(err error) {
+	if err != nil {
+		fmt.Print(err)
+	}
+}
+
 func main() {
 
 	// Read in the user's command.
 	r := bufio.NewReader(os.Stdin)
+
+	// username, groupname
+	var uName string
+	var gName string
 
 	// Read the server address
 	fmt.Print("Please specify the server IP: ")
@@ -59,39 +103,218 @@ func main() {
 	c := pb.NewChatClient(conn)
 
 	// Register the client with the server.
-	var dupe = true
-	for dupe == true {
-
+	for {
 		fmt.Printf("Enter your username: ")
 		tu, err := r.ReadString('\n')
 		if err != nil {
 			fmt.Print(err)
 		}
-		uName := strings.TrimSpace(tu)
+		uName = strings.TrimSpace(tu)
 
 		_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
 
 		if err == nil {
-			dupe = false
 			fmt.Println("Your username: " + uName)
+			break
 		} else {
 			fmt.Print(err)
 		}
 	}
 
-	fmt.Printf("Connectable clients: \n")
+	rMainMenu := true
+	for rMainMenu {
+		MainMenu()
+		tc, err := r.ReadString('\n')
+		tc = strings.TrimSpace(tc)
+		CheckError(err)
 
-	var conClients []string
-	res, err := c.GetClientList(context.Background(), &pb.Empty{})
-	conClients = res.Clients
+		choice, err := strconv.Atoi(tc)
+		CheckError(err)
 
-	if len(conClients) == 0 {
-		fmt.Println("There are currently no clients.")
-	} else {
-		for i, name := range conClients {
-			fmt.Println("  " + strconv.Itoa(i+1) + ") " + name)
+		if choice > 3 || choice < 1 {
+			fmt.Println("Please enter a valid selection between 1 and 3.")
+		} else if choice == 1 {
+			// Create a group
+
+			rCGroup := true
+			for rCGroup {
+				addSpacing(1)
+				fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
+				fmt.Print("Menu> ")
+				gName, err := r.ReadString('\n')
+				gName = strings.TrimSpace(gName)
+				CheckError(err)
+
+				if gName == "!back" {
+					rCGroup = false
+				} else {
+					_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+
+					if nerr != nil {
+						fmt.Println("That group name has already been chosen. Please select a new one.")
+					} else {
+						fmt.Println("Created group named " + gName)
+						addSpacing(3)
+						rCGroup = false
+						rMainMenu = false
+					}
+				}
+			}
+
+		} else if choice == 2 {
+			// View groups
+			// List the current groups.
+			tr, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+			res := tr.Groups
+
+			if len(res) == 0 {
+				fmt.Println("There are currently no groups created. Go back to the main menu to create one!")
+				addSpacing(1)
+			} else {
+				fmt.Println("List of all groups: ")
+				for i, gName := range res {
+					fmt.Println("  " + strconv.Itoa(i+1) + ") " + gName)
+				}
+			}
+
+			rGMenu := true
+			for rGMenu {
+				GroupMenu()
+				tgc, err := r.ReadString('\n')
+				tgc = strings.TrimSpace(tgc)
+				CheckError(err)
+
+				gChoice, err := strconv.Atoi(tgc)
+				CheckError(err)
+
+				if gChoice > 4 || gChoice < 1 {
+					fmt.Println("Please enter a valid selection between 1 and 4.")
+				} else if gChoice == 1 {
+					// Join a group
+					rGName := true
+					for rGName {
+						fmt.Println("Enter the name of the group as it appears in the group list or enter !back to go back to the Group menu.")
+						fmt.Print("menu> ")
+						gName, _ = r.ReadString('\n')
+						gName = strings.TrimSpace(gName)
+						CheckError(err)
+
+						if gName == "!back" {
+							rGName = false
+						} else {
+							_, err := c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+
+							if err != nil {
+								fmt.Print("A group with that name doesn't exist. Please check again.")
+							} else {
+								rGName = false    // Leave join menu
+								rGMenu = false    // Leave Group menu
+								rMainMenu = false // Leave main menu
+							}
+						}
+					}
+
+				} else if gChoice == 2 {
+					//View Group members for a group
+					ViewGroupMembersMenu()
+
+					rGMemMenu := true
+					for rGMemMenu {
+						gCName, err := r.ReadString('\n')
+						gCName = strings.TrimSpace(gCName)
+						CheckError(err)
+
+						if gCName == "!back" {
+							rGMemMenu = false
+						} else {
+							cList, err := c.GetGroupClientList(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gCName})
+							if err != nil {
+								fmt.Println("Please enter the group name exactly as it appears in the group list!")
+							} else {
+								fmt.Println(cList)
+								rGMemMenu = false
+							}
+						}
+					}
+				} else if gChoice == 3 {
+					// Refresh the group list
+					tr, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+					res := tr.Groups
+
+					for _, gName := range res {
+						fmt.Println("Group: " + gName)
+					}
+
+				} else {
+					// Go back
+					addSpacing(4)
+					rGMenu = false
+				}
+			}
+		} else {
+			// Exit chat client
+			c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
+			os.Exit(0)
 		}
 	}
 
-	fmt.Println()
+	fmt.Println("You are now chatting in " + gName)
+	addSpacing(1)
+
+	for {
+		fmt.Print("You> ")
+		in, _ := r.ReadString('\n')
+		fmt.Print(in)
+	}
+
+	tGName, rerr := c.EstablishConnection(context.Background(), &pb.InviteRequest{Requester: uName, Clients: clientList})
+	gName := tGName.Group
+
+	if rerr != nil {
+		fmt.Print(err)
+	} else {
+		stream, serr := c.RouteChat(context.Background())
+
+		if serr != nil {
+			fmt.Print(serr)
+		} else {
+			mailBox := make(chan pb.ChatMessage, 100)
+			go receiveMessages(stream, mailBox)
+
+			sQueue := make(chan pb.ChatMessage, 100)
+			go listenToClient(sQueue, r, uName, gName)
+
+			for {
+				select {
+				case toSend := <-sQueue:
+					stream.Send(&toSend)
+				case received := <-mailBox:
+					fmt.Printf("%s> %s", received.Sender, received.Message)
+				}
+			}
+
+			//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
+		}
+	}
+}
+
+func addSpacing(n int) {
+	for i := 0; i <= n; i++ {
+		fmt.Println()
+	}
+}
+
+func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
+	for {
+		fmt.Print("You: ")
+		msg, _ := reader.ReadString('\n')
+		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
+	}
+}
+
+func receiveMessages(stream pb.Chat_RouteChatClient, mailbox chan pb.ChatMessage) {
+	for {
+		msg, _ := stream.Recv()
+		mailbox <- *msg
+	}
 }

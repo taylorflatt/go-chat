@@ -4,10 +4,8 @@ import (
 	"errors"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"sync"
-	"time"
 
 	pb "github.com/taylorflatt/go-chat"
 	context "golang.org/x/net/context"
@@ -23,30 +21,10 @@ const (
 type server struct{}
 
 var clients = make(map[string]chan pb.ChatMessage, 100)
-var groups = make(map[int32]chan pb.ChatMessage, 100)
-var groupClients = make(map[int32][]string)
+var groups = make(map[string]chan pb.ChatMessage, 100)
+var groupClients = make(map[string][]string)
 
 var lock = &sync.RWMutex{}
-
-func RandInt32(min int32, max int32) int32 {
-	rand.Seed(time.Now().Unix())
-	return min + rand.Int31n(max-min)
-}
-
-func removeListener(name int32) {
-
-	lock.Lock()
-	defer lock.Unlock()
-	delete(groups, name)
-}
-
-func hasListener(name string) bool {
-
-	lock.RLock()
-	defer lock.RUnlock()
-	_, ok := clients[name]
-	return ok
-}
 
 func clientExists(name string) bool {
 
@@ -77,61 +55,163 @@ func inGroup(name string) bool {
 
 }
 
-func genGroupName() int32 {
-
-	exists := false
-
-	for {
-		val := RandInt32(1, 1000)
-		// Look through all the groups to make sure it is unique.
-		for g, _ := range groups {
-			if val == g {
-				exists = true
-				break
-			}
-		}
-
-		// If it is unique, return the new group name.
-		if !exists {
-			return val
-		}
-	}
-}
-
-func addClientsToGroup(name int32, buddies []string) {
+func addClientToGroup(cName string, gName string) {
 
 	lock.Lock()
 	defer lock.Unlock()
-	groupClients[name] = buddies
+	cList := groupClients[gName]
+	cList = append(cList, cName)
+	groupClients[gName] = cList
+
+	log.Println("[addClientToGroup] Added " + cName + " to " + gName)
 }
 
-func addGroup(name int32) {
+func addGroup(gName string) {
 
 	lock.Lock()
 	defer lock.Unlock()
-	groups[name] = make(chan pb.ChatMessage, 100)
+	groups[gName] = make(chan pb.ChatMessage, 100)
+	log.Print("[addGroup]: Added group " + gName)
 }
 
 func addClient(name string) error {
 
 	if !clientExists(name) {
 		clients[name] = make(chan pb.ChatMessage, 100)
+		log.Print("[addClient]: Registered client " + name)
 		return nil
 	}
 
 	return errors.New("client (" + name + ") already exists")
+}
+
+func groupExists(gName string) bool {
+
+	lock.RLock()
+	defer lock.RUnlock()
+	for g := range groups {
+		if g == gName {
+			return true
+		}
+	}
+
+	return false
+}
+
+func removeClient(name string) error {
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	if clientExists(name) {
+		delete(clients, name)
+		log.Print("[removeClient]: Removed client " + name)
+
+		if inGroup(name) {
+			// Look through all the groups.
+			for gName := range groupClients {
+				listG := groupClients[gName]
+				// Look through all the users in the group.
+				for i, cName := range listG {
+					// Remove the user from the group.
+					if cName == name {
+						listG[i] = listG[len(listG)-1]
+						listG = listG[:len(listG)-1]
+						groupClients[name] = listG
+						log.Print("[removeClient]: Removed client " + name + " from group " + gName)
+
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return errors.New("[removeClient]: Client (" + name + ") doesn't exist")
+}
+
+func (s *server) UnRegister(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
+
+	uName := in.Sender
+	err := removeClient(uName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.Empty{}, nil
 
 }
 
-func (s *server) Register(ctx context.Context, in *pb.ClientInfo) (*pb.InviteResponse, error) {
+func (s *server) GetGroupClientList(ctx context.Context, in *pb.GroupInfo) (*pb.ClientList, error) {
+
+	gName := in.GroupName
+
+	if !groupExists(gName) {
+		return &pb.ClientList{}, errors.New("that group doesn't exist")
+	}
+
+	cList := groupClients[gName]
+
+	log.Print("[GetGroupClientList]: For group " + gName + " returned members ")
+	log.Print(cList)
+
+	return &pb.ClientList{Clients: cList}, nil
+}
+
+func (s *server) GetGroupList(ctx context.Context, in *pb.Empty) (*pb.GroupList, error) {
+
+	var g []string
+	for gName := range groups {
+		g = append(g, gName)
+	}
+
+	log.Print("[GetGroupList]: Returned list of current groups ")
+	log.Print(g)
+
+	return &pb.GroupList{Groups: g}, nil
+}
+
+func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
+
+	cName := in.Client
+	gName := in.GroupName
+
+	log.Printf("[JoinGroup] Attempting to add " + cName + " to group" + gName)
+
+	if groupExists(gName) {
+		addClientToGroup(cName, gName)
+
+		return &pb.Empty{}, nil
+	}
+
+	return &pb.Empty{}, errors.New("a group with that name doesn't exist")
+}
+
+func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
+
+	cName := in.Client
+	gName := in.GroupName
+
+	if !groupExists(gName) {
+		addGroup(gName)
+		addClientToGroup(cName, gName)
+
+		return &pb.Empty{}, nil
+	}
+
+	return &pb.Empty{}, errors.New("a group with that name already exists")
+}
+
+func (s *server) Register(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
 	err := addClient(in.Sender)
 
 	if err != nil {
-		return &pb.InviteResponse{Response: false}, err
+		return nil, err
 	}
 
-	return &pb.InviteResponse{Response: true}, nil
+	return &pb.Empty{}, nil
 
 }
 
@@ -146,32 +226,6 @@ func (s *server) GetClientList(ctx context.Context, in *pb.Empty) (*pb.ClientLis
 
 }
 
-func (s *server) EstablishConnection(ctx context.Context, in *pb.InviteRequest) (*pb.InviteResponse, error) {
-
-	buddies := in.Clients
-	numClients := len(buddies)
-
-	// Check that all the clients are currently on the server and not already in groups.
-	if numClients != 0 {
-		for _, name := range buddies {
-			if !clientExists(name) {
-				return &pb.InviteResponse{Response: false}, errors.New("connection failed: the client (" + name + ") isn't registered on the server anymore")
-			} else if inGroup(name) {
-				return &pb.InviteResponse{Response: false}, errors.New("connection failed: the client (" + name + ") is already in another group")
-			}
-		}
-	} else {
-		return &pb.InviteResponse{Response: false}, errors.New("connection failed: there are no clients registered with the server")
-	}
-
-	// Now we need to create a group that contains all of the buddies with a single channel.
-	name := genGroupName()
-	addGroup(name)
-	addClientsToGroup(name, buddies)
-
-	return &pb.InviteResponse{Response: true}, nil
-}
-
 func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 
 	msg, err := stream.Recv()
@@ -179,6 +233,8 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("[RouteChat]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 
 	gChan := groups[msg.Receiver]
 	go listenToClient(stream, gChan)
@@ -194,7 +250,7 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 
 }
 
-func broadcast(sender string, gName int32, msg pb.ChatMessage) {
+func broadcast(sender string, gName string, msg pb.ChatMessage) {
 
 	lock.Lock()
 	defer lock.Unlock()
@@ -202,6 +258,7 @@ func broadcast(sender string, gName int32, msg pb.ChatMessage) {
 	gChan := groups[gName]
 	for _, buddy := range groupClients[gName] {
 		if buddy != sender {
+			log.Printf("Client " + sender + " sent " + gName + " a message: " + msg.Message)
 			gChan <- msg
 		}
 	}
@@ -214,6 +271,7 @@ func listenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessa
 		}
 		if err != nil {
 		}
+		log.Printf("Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 		messages <- *msg
 	}
 }

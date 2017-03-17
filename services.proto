@@ -6,11 +6,17 @@ package goChat;
 service Chat {
     rpc RouteChat(stream ChatMessage) returns (stream ChatMessage) {}
 
-    rpc EstablishConnection(InviteRequest) returns (InviteResponse) {}
+    rpc UnRegister(ClientInfo) returns (Empty) {}
 
-    rpc Register(ClientInfo) returns (InviteResponse) {}
+    rpc Register(ClientInfo) returns (Empty) {}
 
-    rpc GetClientList(Empty) returns (ClientList) {}
+    rpc CreateGroup(GroupInfo) returns (Empty) {}
+
+    rpc JoinGroup(GroupInfo) returns (Empty) {}
+
+    rpc GetGroupList(Empty) returns (GroupList) {}
+
+    rpc GetGroupClientList(GroupInfo) returns (ClientList) {}
 }
 
 message Empty {
@@ -19,7 +25,7 @@ message Empty {
 
 message ChatMessage {
     string sender = 1;
-    int32 receiver = 2;
+    string receiver = 2;
     string message = 3;
 }
 
@@ -27,15 +33,15 @@ message ClientInfo {
     string sender = 1;
 }
 
+message GroupInfo {
+    string client = 1;
+    string groupName = 2;
+}
+
+message GroupList {
+    repeated string groups = 1;
+}
+
 message ClientList {
     repeated string clients = 1;
-}
-
-message InviteRequest {
-    string requester = 1;
-    repeated string clients = 2;
-}
-
-message InviteResponse {
-    bool response = 1;
 }
