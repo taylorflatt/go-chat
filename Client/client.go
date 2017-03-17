@@ -67,12 +67,13 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 	stream, err := c.RouteChat(context.Background())
 	waitc := make(chan struct{})
 
-	fmt.Printf("\n\nPlease enter '\\exit' to exit the chat.\n")
+	fmt.Printf("\n\nPlease enter '!exit' to exit the chat.\n")
 	for {
 		// Close the connection if the user enters exit.
 		fmt.Printf("You: ")
 		m, _ := r.ReadString('\n')
-		if m == "\\exit" {
+		m = strings.TrimSpace(m)
+		if m == "!exit" {
 			c.UnRegisterClient(context.Background(), &pb.ClientInfo{Ip: cIP, Port: cPort})
 			break
 		} else {

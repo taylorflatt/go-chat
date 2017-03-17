@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"os/exec"
 	"strconv"
 
 	pb "github.com/taylorflatt/go-chat"
@@ -20,19 +19,18 @@ const (
 // Server is used to implement the RemoteCommandServer
 type server struct{}
 
+type Tuple struct {
+	a, b interface{}
+}
+
 // List of clients connected to the server. Here ip is key and port is value.
-var clients map[string]int32
+var clients []Tuple
 
-// Executes a remote command from a client and returns that output. Otherwise, it will print an error.
-func executeCommand(commandName string, commandArgs []string) string {
-	tOutput, err := exec.Command(commandName, commandArgs...).Output()
-	output := string(tOutput)
-
-	if err != nil {
-		return err.Error()
-	}
-
-	return output
+// RemoveElement swaps the element to delete with the one at the end of the array then resizes the
+// array to the new size. It returns a tuple without the element at index i.
+func RemoveElement(a []Tuple, i int) []Tuple {
+	a[len(a)-1], a[i] = a[i], a[len(a)-1]
+	return a[:len(a)-1]
 }
 
 // Registers the client with the server as available to talk.
@@ -40,7 +38,9 @@ func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Res
 
 	var ip = in.Ip
 	var port = in.Port
-	clients[ip] = port
+
+	pair := Tuple{ip, port}
+	clients = append(clients, pair)
 
 	log.Println("Registered " + ip + ":" + strconv.Itoa(int(port)))
 
@@ -54,7 +54,15 @@ func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Res
 func (s *server) UnRegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Response, error) {
 
 	var ip = in.Ip
-	delete(clients, ip)
+	var port = in.Port
+
+	for i, value := range clients {
+		if value.a == ip && value.b == port {
+			log.Println("Removing " + ip + ":" + strconv.Itoa(int(port)))
+			clients = RemoveElement(clients, i)
+			break
+		}
+	}
 
 	return &pb.Response{}, nil
 }
@@ -65,9 +73,10 @@ func (s *server) GetClientList(ctx context.Context, in *pb.List) (*pb.ClientList
 	// List of just the IPs.
 	var cIps []string
 	var cPorts []int32
-	for key, value := range clients {
-		cIps = append(cIps, key)
-		cPorts = append(cPorts, value)
+
+	for _, value := range clients {
+		cIps = append(cIps, value.a.(string))
+		cPorts = append(cPorts, value.b.(int32))
 	}
 
 	return &pb.ClientList{Ip: cIps, Port: cPorts}, nil
@@ -98,8 +107,6 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 //}
 
 func main() {
-	// Initialize the map.
-	clients = make(map[string]int32)
 
 	lis, err := net.Listen("tcp", port)
 
