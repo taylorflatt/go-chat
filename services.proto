@@ -7,13 +7,28 @@ service Chat {
     rpc RouteChat(stream ChatMessage) returns (stream ChatMessage) {}
 
     rpc EstablishConnection(InviteRequest) returns (InviteResponse) {}
+
+    rpc Register(ClientInfo) returns (InviteResponse) {}
+
+    rpc GetClientList(Empty) returns (ClientList) {}
+}
+
+message Empty {
+
 }
 
 message ChatMessage {
     string sender = 1;
-    string receiver = 2;
+    int32 receiver = 2;
     string message = 3;
-    bool register = 4;
+}
+
+message ClientInfo {
+    string sender = 1;
+}
+
+message ClientList {
+    repeated string clients = 1;
 }
 
 message InviteRequest {

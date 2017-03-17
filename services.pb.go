@@ -9,7 +9,10 @@ It is generated from these files:
 	services.proto
 
 It has these top-level messages:
+	Empty
 	ChatMessage
+	ClientInfo
+	ClientList
 	InviteRequest
 	InviteResponse
 */
@@ -35,17 +38,24 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
+type Empty struct {
+}
+
+func (m *Empty) Reset()                    { *m = Empty{} }
+func (m *Empty) String() string            { return proto.CompactTextString(m) }
+func (*Empty) ProtoMessage()               {}
+func (*Empty) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+
 type ChatMessage struct {
 	Sender   string `protobuf:"bytes,1,opt,name=sender" json:"sender,omitempty"`
-	Receiver string `protobuf:"bytes,2,opt,name=receiver" json:"receiver,omitempty"`
+	Receiver int32  `protobuf:"varint,2,opt,name=receiver" json:"receiver,omitempty"`
 	Message  string `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`
-	Register bool   `protobuf:"varint,4,opt,name=register" json:"register,omitempty"`
 }
 
 func (m *ChatMessage) Reset()                    { *m = ChatMessage{} }
 func (m *ChatMessage) String() string            { return proto.CompactTextString(m) }
 func (*ChatMessage) ProtoMessage()               {}
-func (*ChatMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (*ChatMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
 
 func (m *ChatMessage) GetSender() string {
 	if m != nil {
@@ -54,11 +64,11 @@ func (m *ChatMessage) GetSender() string {
 	return ""
 }
 
-func (m *ChatMessage) GetReceiver() string {
+func (m *ChatMessage) GetReceiver() int32 {
 	if m != nil {
 		return m.Receiver
 	}
-	return ""
+	return 0
 }
 
 func (m *ChatMessage) GetMessage() string {
@@ -68,11 +78,36 @@ func (m *ChatMessage) GetMessage() string {
 	return ""
 }
 
-func (m *ChatMessage) GetRegister() bool {
+type ClientInfo struct {
+	Sender string `protobuf:"bytes,1,opt,name=sender" json:"sender,omitempty"`
+}
+
+func (m *ClientInfo) Reset()                    { *m = ClientInfo{} }
+func (m *ClientInfo) String() string            { return proto.CompactTextString(m) }
+func (*ClientInfo) ProtoMessage()               {}
+func (*ClientInfo) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+
+func (m *ClientInfo) GetSender() string {
 	if m != nil {
-		return m.Register
+		return m.Sender
 	}
-	return false
+	return ""
+}
+
+type ClientList struct {
+	Clients []string `protobuf:"bytes,1,rep,name=clients" json:"clients,omitempty"`
+}
+
+func (m *ClientList) Reset()                    { *m = ClientList{} }
+func (m *ClientList) String() string            { return proto.CompactTextString(m) }
+func (*ClientList) ProtoMessage()               {}
+func (*ClientList) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+
+func (m *ClientList) GetClients() []string {
+	if m != nil {
+		return m.Clients
+	}
+	return nil
 }
 
 type InviteRequest struct {
@@ -83,7 +118,7 @@ type InviteRequest struct {
 func (m *InviteRequest) Reset()                    { *m = InviteRequest{} }
 func (m *InviteRequest) String() string            { return proto.CompactTextString(m) }
 func (*InviteRequest) ProtoMessage()               {}
-func (*InviteRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (*InviteRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
 
 func (m *InviteRequest) GetRequester() string {
 	if m != nil {
@@ -106,7 +141,7 @@ type InviteResponse struct {
 func (m *InviteResponse) Reset()                    { *m = InviteResponse{} }
 func (m *InviteResponse) String() string            { return proto.CompactTextString(m) }
 func (*InviteResponse) ProtoMessage()               {}
-func (*InviteResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+func (*InviteResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
 
 func (m *InviteResponse) GetResponse() bool {
 	if m != nil {
@@ -116,7 +151,10 @@ func (m *InviteResponse) GetResponse() bool {
 }
 
 func init() {
+	proto.RegisterType((*Empty)(nil), "goChat.Empty")
 	proto.RegisterType((*ChatMessage)(nil), "goChat.ChatMessage")
+	proto.RegisterType((*ClientInfo)(nil), "goChat.ClientInfo")
+	proto.RegisterType((*ClientList)(nil), "goChat.ClientList")
 	proto.RegisterType((*InviteRequest)(nil), "goChat.InviteRequest")
 	proto.RegisterType((*InviteResponse)(nil), "goChat.InviteResponse")
 }
@@ -134,6 +172,8 @@ const _ = grpc.SupportPackageIsVersion4
 type ChatClient interface {
 	RouteChat(ctx context.Context, opts ...grpc.CallOption) (Chat_RouteChatClient, error)
 	EstablishConnection(ctx context.Context, in *InviteRequest, opts ...grpc.CallOption) (*InviteResponse, error)
+	Register(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*InviteResponse, error)
+	GetClientList(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ClientList, error)
 }
 
 type chatClient struct {
@@ -184,11 +224,31 @@ func (c *chatClient) EstablishConnection(ctx context.Context, in *InviteRequest,
 	return out, nil
 }
 
+func (c *chatClient) Register(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*InviteResponse, error) {
+	out := new(InviteResponse)
+	err := grpc.Invoke(ctx, "/goChat.Chat/Register", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatClient) GetClientList(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ClientList, error) {
+	out := new(ClientList)
+	err := grpc.Invoke(ctx, "/goChat.Chat/GetClientList", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Chat service
 
 type ChatServer interface {
 	RouteChat(Chat_RouteChatServer) error
 	EstablishConnection(context.Context, *InviteRequest) (*InviteResponse, error)
+	Register(context.Context, *ClientInfo) (*InviteResponse, error)
+	GetClientList(context.Context, *Empty) (*ClientList, error)
 }
 
 func RegisterChatServer(s *grpc.Server, srv ChatServer) {
@@ -239,6 +299,42 @@ func _Chat_EstablishConnection_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Chat_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClientInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServer).Register(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/goChat.Chat/Register",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServer).Register(ctx, req.(*ClientInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Chat_GetClientList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServer).GetClientList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/goChat.Chat/GetClientList",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServer).GetClientList(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Chat_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "goChat.Chat",
 	HandlerType: (*ChatServer)(nil),
@@ -246,6 +342,14 @@ var _Chat_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EstablishConnection",
 			Handler:    _Chat_EstablishConnection_Handler,
+		},
+		{
+			MethodName: "Register",
+			Handler:    _Chat_Register_Handler,
+		},
+		{
+			MethodName: "GetClientList",
+			Handler:    _Chat_GetClientList_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -262,22 +366,25 @@ var _Chat_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("services.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 260 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x6c, 0x91, 0xbf, 0x4e, 0xc3, 0x30,
-	0x10, 0xc6, 0xeb, 0xb6, 0x2a, 0xcd, 0x21, 0x3a, 0xb8, 0xa2, 0xb2, 0x22, 0x86, 0xc8, 0x53, 0x06,
-	0x14, 0x21, 0x18, 0x19, 0x2b, 0x40, 0x0c, 0x2c, 0x79, 0x83, 0x34, 0x9c, 0x52, 0x4b, 0xc5, 0x2e,
-	0xbe, 0x6b, 0x78, 0x08, 0x5e, 0x1a, 0xc5, 0x4e, 0xc2, 0x1f, 0x31, 0xe5, 0x7e, 0xdf, 0xe9, 0xbb,
-	0x2f, 0x77, 0x86, 0x15, 0xa1, 0x6f, 0x4d, 0x8d, 0x54, 0x1c, 0xbd, 0x63, 0x27, 0x17, 0x8d, 0xdb,
-	0xee, 0x2b, 0xd6, 0x1f, 0x70, 0xde, 0x7d, 0x5f, 0x90, 0xa8, 0x6a, 0x50, 0x6e, 0x60, 0x41, 0x68,
-	0x5f, 0xd1, 0x2b, 0x91, 0x89, 0x3c, 0x29, 0x7b, 0x92, 0x29, 0x2c, 0x3d, 0xd6, 0x68, 0x5a, 0xf4,
-	0x6a, 0x1a, 0x3a, 0x23, 0x4b, 0x05, 0x67, 0x6f, 0xd1, 0xae, 0x66, 0xa1, 0x35, 0x60, 0x74, 0x35,
-	0x86, 0x18, 0xbd, 0x9a, 0x67, 0x22, 0x5f, 0x96, 0x23, 0xeb, 0x27, 0xb8, 0x78, 0xb6, 0xad, 0x61,
-	0x2c, 0xf1, 0xfd, 0x84, 0xc4, 0xf2, 0x0a, 0x12, 0x1f, 0xcb, 0x31, 0xfd, 0x5b, 0xe8, 0x42, 0xea,
-	0x83, 0x41, 0xcb, 0xa4, 0xa6, 0xd9, 0xac, 0x0b, 0xe9, 0x51, 0x5f, 0xc3, 0x6a, 0x18, 0x44, 0x47,
-	0x67, 0xa9, 0x8f, 0x8d, 0x75, 0x18, 0x14, 0x62, 0x23, 0xdf, 0x7e, 0x0a, 0x98, 0x77, 0x0b, 0xcb,
-	0x7b, 0x48, 0x4a, 0x77, 0x62, 0x0c, 0xb0, 0x2e, 0xe2, 0x39, 0x8a, 0x1f, 0xb7, 0x48, 0xff, 0x13,
-	0xf5, 0x24, 0x17, 0x37, 0x42, 0x3e, 0xc2, 0xfa, 0x81, 0xb8, 0xda, 0x1d, 0x0c, 0xed, 0xb7, 0xce,
-	0x5a, 0xac, 0xd9, 0x38, 0x2b, 0x2f, 0x07, 0xc7, 0xaf, 0xcd, 0xd2, 0xcd, 0x5f, 0x39, 0xfe, 0x8b,
-	0x9e, 0xec, 0x16, 0xe1, 0x31, 0xee, 0xbe, 0x02, 0x00, 0x00, 0xff, 0xff, 0x8b, 0xb8, 0x88, 0x8f,
-	0x9e, 0x01, 0x00, 0x00,
+	// 315 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x7c, 0x92, 0xcf, 0x4b, 0x3b, 0x31,
+	0x10, 0xc5, 0x9b, 0xf6, 0xdb, 0x5f, 0xf3, 0xa5, 0x3d, 0xa4, 0x58, 0x96, 0xc5, 0x43, 0x09, 0x22,
+	0x3d, 0x48, 0x11, 0xf5, 0x20, 0x78, 0x2c, 0xb5, 0x14, 0xf4, 0x92, 0xab, 0xa7, 0x76, 0x1d, 0xdb,
+	0x40, 0x9b, 0xac, 0x99, 0x74, 0xc1, 0xbf, 0xdd, 0x8b, 0x6c, 0xd2, 0x5d, 0xb7, 0x45, 0xbd, 0xe5,
+	0x3d, 0xe6, 0x7d, 0x76, 0xe7, 0x31, 0xd0, 0x27, 0xb4, 0x99, 0x4a, 0x90, 0x26, 0xa9, 0x35, 0xce,
+	0xf0, 0xd6, 0xda, 0x4c, 0x37, 0x4b, 0x27, 0xda, 0xd0, 0x9c, 0xed, 0x52, 0xf7, 0x21, 0x5e, 0xe0,
+	0x7f, 0x6e, 0x3c, 0x23, 0xd1, 0x72, 0x8d, 0x7c, 0x08, 0x2d, 0x42, 0xfd, 0x8a, 0x36, 0x62, 0x23,
+	0x36, 0xee, 0xca, 0x83, 0xe2, 0x31, 0x74, 0x2c, 0x26, 0xa8, 0x32, 0xb4, 0x51, 0x7d, 0xc4, 0xc6,
+	0x4d, 0x59, 0x6a, 0x1e, 0x41, 0x7b, 0x17, 0xe2, 0x51, 0xc3, 0x87, 0x0a, 0x29, 0x2e, 0x00, 0xa6,
+	0x5b, 0x85, 0xda, 0x2d, 0xf4, 0x9b, 0xf9, 0x8d, 0x2d, 0x2e, 0x8b, 0xa9, 0x27, 0x45, 0x2e, 0xa7,
+	0x25, 0x5e, 0x51, 0xc4, 0x46, 0x8d, 0x9c, 0x76, 0x90, 0x62, 0x0e, 0xbd, 0x85, 0xce, 0x94, 0x43,
+	0x89, 0xef, 0x7b, 0x24, 0xc7, 0xcf, 0xa1, 0x6b, 0xc3, 0xb3, 0x64, 0x7e, 0x1b, 0x55, 0x50, 0xfd,
+	0x18, 0x74, 0x05, 0xfd, 0x02, 0x44, 0xa9, 0xd1, 0x84, 0x61, 0xbd, 0xf0, 0xf6, 0xa0, 0x8e, 0x2c,
+	0xf5, 0xcd, 0x27, 0x83, 0x7f, 0x79, 0x45, 0xfc, 0x01, 0xba, 0xd2, 0xec, 0x1d, 0x7a, 0x31, 0x98,
+	0x84, 0x26, 0x27, 0x95, 0xf6, 0xe2, 0x9f, 0x4c, 0x51, 0x1b, 0xb3, 0x6b, 0xc6, 0x1f, 0x61, 0x30,
+	0x23, 0xb7, 0x5c, 0x6d, 0x15, 0x6d, 0xa6, 0x46, 0x6b, 0x4c, 0x9c, 0x32, 0x9a, 0x9f, 0x15, 0x89,
+	0xa3, 0xcd, 0xe2, 0xe1, 0xa9, 0x1d, 0xfe, 0x45, 0xd4, 0xf8, 0x3d, 0x74, 0x24, 0xae, 0x95, 0xdf,
+	0x90, 0x97, 0x9f, 0x2b, 0x4b, 0xfe, 0x23, 0x79, 0x07, 0xbd, 0x39, 0xba, 0x4a, 0xd3, 0xbd, 0x62,
+	0xd4, 0x5f, 0x42, 0x7c, 0x42, 0xcb, 0x47, 0x44, 0x6d, 0xd5, 0xf2, 0x77, 0x73, 0xfb, 0x15, 0x00,
+	0x00, 0xff, 0xff, 0xbc, 0x7f, 0xfa, 0xd6, 0x49, 0x02, 0x00, 0x00,
 }
