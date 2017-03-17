@@ -1,14 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"io"
+	"fmt"
 	"log"
 	"net"
-	"strconv"
+	"sync"
 
 	pb "github.com/taylorflatt/go-chat"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -20,96 +20,127 @@ const (
 // Server is used to implement the RemoteCommandServer
 type server struct{}
 
-type Tuple struct {
-	a, b interface{}
+var clients = make(map[string]chan pb.ChatMessage, 100)
+var groups = make(map[string]chan pb.ChatMessage, 100)
+var groupClients = make(map[string][]string)
+
+var lock = &sync.RWMutex{}
+
+func addListener(name string, queue chan pb.ChatMessage) {
+
+	lock.Lock()
+	defer lock.Unlock()
+	groups[name] = queue
 }
 
-// List of clients connected to the server. Here ip is key and port is value.
-var clients []Tuple
+func removeListener(name string) {
 
-// RemoveElement swaps the element to delete with the one at the end of the array then resizes the
-// array to the new size. It returns a tuple without the element at index i.
-func RemoveElement(a []Tuple, i int) []Tuple {
-	a[len(a)-1], a[i] = a[i], a[len(a)-1]
-	return a[:len(a)-1]
+	lock.Lock()
+	defer lock.Unlock()
+	delete(groups, name)
 }
 
-// Registers the client with the server as available to talk.
-func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Response, error) {
+func hasListener(name string) bool {
 
-	var ip = in.Ip
-	var port = in.Port
-	var exists = false
+	lock.RLock()
+	defer lock.RUnlock()
+	_, ok := clients[name]
+	return ok
+}
 
-	// Check if the ip/port are already registered.
-	for _, value := range clients {
-		if value.a == ip && value.b == port {
-			exists = true
+func broadcast(client string, msg pb.ChatMessage) {
+
+	lock.Lock()
+	defer lock.Unlock()
+	for sender, queue := range clients {
+		if sender != client {
+			queue <- msg
+		}
+	}
+}
+
+func clientExists(name string) bool {
+
+	lock.RLock()
+	defer lock.RUnlock()
+	for c := range clients {
+		if c == name {
+			return true
 		}
 	}
 
-	if exists == false {
-		pair := Tuple{ip, port}
-		clients = append(clients, pair)
-	} else {
-		log.Println("Duplicate host attempted to register. Disallowing registration...")
-		return &pb.Response{}, errors.New("ip: " + ip + " and port: " + strconv.Itoa(int(port)) + " are already registered on the server")
-	}
-
-	log.Println("Registered " + ip + ":" + strconv.Itoa(int(port)))
-	log.Print("Current Clients: ")
-	log.Print(clients)
-
-	return &pb.Response{}, nil
+	return false
 }
 
-// Unregisters the client with the server by deleting it from the global list.
-func (s *server) UnRegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Response, error) {
+func inGroup(name string) bool {
 
-	var ip = in.Ip
-	var port = in.Port
-
-	for i, value := range clients {
-		if value.a == ip && value.b == port {
-			log.Println("Removing " + ip + ":" + strconv.Itoa(int(port)))
-			clients = RemoveElement(clients, i)
-			break
+	lock.RLock()
+	defer lock.RUnlock()
+	for n, c := range groupClients {
+		for _, s := range c {
+			if name == s {
+				return true
+			}
 		}
 	}
 
-	return &pb.Response{}, nil
+	return false
 }
 
-// Sends the list of currently registered IPs to the client.
-func (s *server) GetClientList(ctx context.Context, in *pb.List) (*pb.ClientList, error) {
+func (s *server) EstablishConnection(ctx context.Context, in *pb.InviteRequest) (*pb.InviteRequest, error) {
 
-	// List of just the IPs.
-	var cIps []string
-	var cPorts []int32
+	requester := in.Requester
+	buddies := in.Clients
+	numClients := len(buddies)
 
-	for _, value := range clients {
-		cIps = append(cIps, value.a.(string))
-		cPorts = append(cPorts, value.b.(int32))
+	// Check that all the clients are currently on the server and not already in groups.
+	for _, name := range buddies {
+		if !clientExists(name) {
+			return nil, errors.New("connection failed: the client (" + name + ") isn't registered on the server anymore")
+		} else if inGroup(name) {
+			return nil, errors.New("connection failed: the client (" + name + ") is already in another group")
+		}
 	}
 
-	return &pb.ClientList{Ip: cIps, Port: cPorts}, nil
 }
 
 func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 
-	for {
-		in, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
+	msg, err := stream.Recv()
 
-		log.Print(in.Ip + " sent " + in.Message)
-
-		stream.Send(in)
+	if err != nil {
+		return err
 	}
+
+	in := make(chan pb.ChatMessage, 100)
+	var client string
+
+	// Register the client with the server.
+	if msg.Register {
+		client = msg.Sender
+
+		if hasListener(client) {
+			return fmt.Errorf("this client already exists")
+		}
+
+		addListener(client, in)
+	} else {
+		return fmt.Errorf("you need to register prior to sending messages")
+	}
+
+	// Send/Receive messages.
+	out := make(chan pb.Message, 100)
+	go listenToClient(stream, out)
+
+	for {
+		select {
+		case outbox := <-out:
+			broadcast(client, outbox)
+		case inbox := <-in:
+			stream.Send(&inbox)
+		}
+	}
+
 }
 
 func main() {

@@ -4,43 +4,23 @@ package goChat;
 
 // Defines the service between client and server.
 service Chat {
-    // Registers the client with the server.
-    rpc RegisterClient(ClientInfo) returns (Response) {}
+    rpc RouteChat(stream ChatMessage) returns (stream ChatMessage) {}
 
-    // Unregisters the client with the server.
-    rpc UnRegisterClient(ClientInfo) returns (Response) {}
-
-    // Gets the list of clients from the server.
-    rpc GetClientList(List) returns (ClientList) {}
-
-    // Routes the chat messages from client to client.
-    rpc RouteChat(stream RouteMessage) returns (stream RouteMessage) {}
+    rpc EstablishConnection(InviteRequest) returns (InviteResponse) {}
 }
 
-message List{
-
+message ChatMessage {
+    string sender = 1;
+    string receiver = 2;
+    string message = 3;
+    bool register = 4;
 }
 
-message Response {
-
-}       
-
-message ClientInfo {
-    string ip = 1;
-    int32 port = 2;
+message InviteRequest {
+    string requester = 1;
+    repeated string clients = 2;
 }
 
-
-message RegistrationReply {
-    string response = 1;
-}
-
-message ClientList {
-    repeated string ip = 1;
-    repeated int32 port = 2;
-}
-
-message RouteMessage {
-    string ip = 1;
-    string message = 2;
+message InviteResponse {
+    bool response = 1;
 }

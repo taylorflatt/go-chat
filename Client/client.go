@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -44,6 +45,8 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 			ports = res.Port
 
 			// TODO: Remove the current client's IP from the list of clients connected.
+			// TODO: Add the ip/port to a hash map for quick lookup and so the client only needs to enter a number
+			// 		 rather than the ip/port.
 			for i := range ips {
 				// TODO: Rewrite to a custom function for quicker conversion.
 				fmt.Println(strconv.Itoa(i+1) + ") " + ips[i] + ":" + strconv.Itoa(int(ports[i])))
@@ -69,8 +72,25 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 	waitc := make(chan struct{})
 
 	fmt.Printf("\n\nPlease enter '!exit' to exit the chat.\n")
+
+	go func() {
+		for {
+			// Read messages:
+			in, err := stream.Recv()
+			if err == io.EOF {
+				close(waitc)
+				return
+			}
+			if err != nil {
+				log.Fatalf("Failed to receive message: %v", err)
+			}
+
+			fmt.Printf("Other: " + in.Message)
+		}
+	}()
+
 	for {
-		// Close the connection if the user enters exit.
+		// Write messages:
 		fmt.Printf("You: ")
 		m, _ := r.ReadString('\n')
 		m = strings.TrimSpace(m)
@@ -78,7 +98,7 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 			c.UnRegisterClient(context.Background(), &pb.ClientInfo{Ip: cIP, Port: cPort})
 			break
 		} else {
-			msg := &pb.RouteMessage{Ip: client, Message: m}
+			msg := &pb.RouteMessage{Ip: cIP, Port: cPort, Message: m}
 			stream.Send(msg)
 		}
 
@@ -86,8 +106,8 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 			log.Fatalf("Command failed: %v", err)
 		}
 	}
-	<-waitc
 	stream.CloseSend()
+	<-waitc
 }
 
 func main() {
@@ -131,7 +151,7 @@ func main() {
 		}
 	}
 
-	fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type exit.\n", address)
+	fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type !exit.\n", address)
 
 	for true {
 		fmt.Printf("\nWould you like to group chat (yes/no): ")
