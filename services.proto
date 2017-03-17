@@ -23,7 +23,7 @@ message List{
 
 message Response {
 
-}
+}       
 
 message ClientInfo {
     string ip = 1;

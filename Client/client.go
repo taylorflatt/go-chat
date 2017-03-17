@@ -22,7 +22,8 @@ const (
 	//port = 12021
 )
 
-func randInt32(min int32, max int32) int32 {
+// RandInt32 generates a random int32 between two values.
+func RandInt32(min int32, max int32) int32 {
 	rand.Seed(time.Now().Unix())
 	return min + rand.Int31n(max-min)
 }
@@ -91,12 +92,6 @@ func SingleChat(c pb.ChatClient, r *bufio.Reader) {
 
 func main() {
 
-	// TODO: Create server function to make sure that the port generated isn't already
-	// registered with the server.
-	// Generate unique port.
-	port := randInt32(10000, 15000)
-	fmt.Println("Your port: " + strconv.Itoa(int(port)))
-
 	// Read in the user's command.
 	r := bufio.NewReader(os.Stdin)
 
@@ -124,7 +119,17 @@ func main() {
 	c := pb.NewChatClient(conn)
 
 	// Register the client with the server.
-	c.RegisterClient(context.Background(), &pb.ClientInfo{Ip: ip, Port: port})
+	var dupe = true
+	for dupe == true {
+		// Generate unique port.
+		port := RandInt32(10000, 15000)
+		_, err := c.RegisterClient(context.Background(), &pb.ClientInfo{Ip: ip, Port: port})
+
+		if err == nil {
+			dupe = false
+			fmt.Println("Your port: " + strconv.Itoa(int(port)))
+		}
+	}
 
 	fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type exit.\n", address)
 

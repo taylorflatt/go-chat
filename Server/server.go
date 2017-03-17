@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -38,12 +39,24 @@ func (s *server) RegisterClient(ctx context.Context, in *pb.ClientInfo) (*pb.Res
 
 	var ip = in.Ip
 	var port = in.Port
+	var exists = false
 
-	pair := Tuple{ip, port}
-	clients = append(clients, pair)
+	// Check if the ip/port are already registered.
+	for _, value := range clients {
+		if value.a == ip && value.b == port {
+			exists = true
+		}
+	}
+
+	if exists == false {
+		pair := Tuple{ip, port}
+		clients = append(clients, pair)
+	} else {
+		log.Println("Duplicate host attempted to register. Disallowing registration...")
+		return &pb.Response{}, errors.New("ip: " + ip + " and port: " + strconv.Itoa(int(port)) + " are already registered on the server")
+	}
 
 	log.Println("Registered " + ip + ":" + strconv.Itoa(int(port)))
-
 	log.Print("Current Clients: ")
 	log.Print(clients)
 
@@ -98,13 +111,6 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		stream.Send(in)
 	}
 }
-
-//
-//func (s *server) ConnectClients(ctx context.Context, in *pb.ClientIp) (*pb.Response, error) {
-//
-//	var ip = in.Ip
-//
-//}
 
 func main() {
 
