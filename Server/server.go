@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"sync"
+	"time"
 
 	pb "github.com/taylorflatt/go-chat"
 	"google.golang.org/grpc"
@@ -21,10 +23,15 @@ const (
 type server struct{}
 
 var clients = make(map[string]chan pb.ChatMessage, 100)
-var groups = make(map[string]chan pb.ChatMessage, 100)
-var groupClients = make(map[string][]string)
+var groups = make(map[int]chan pb.ChatMessage, 100)
+var groupClients = make(map[int][]string)
 
 var lock = &sync.RWMutex{}
+
+func RandInt(min int, max int) int {
+	rand.Seed(time.Now().Unix())
+	return min + rand.Intn(max-min)
+}
 
 func addListener(name string, queue chan pb.ChatMessage) {
 
@@ -85,9 +92,31 @@ func inGroup(name string) bool {
 	}
 
 	return false
+
 }
 
-func (s *server) EstablishConnection(ctx context.Context, in *pb.InviteRequest) (*pb.InviteRequest, error) {
+func genGroupName() int {
+
+	exists := false
+
+	for {
+		val := RandInt(1, 1000)
+		// Look through all the groups to make sure it is unique.
+		for g, _ := range groups {
+			if val == g {
+				exists = true
+				break
+			}
+		}
+
+		// If it is unique, return the new group name.
+		if !exists {
+			return val
+		}
+	}
+}
+
+func (s *server) EstablishConnection(ctx context.Context, in *pb.InviteRequest) (*pb.InviteResponse, error) {
 
 	requester := in.Requester
 	buddies := in.Clients
@@ -96,12 +125,18 @@ func (s *server) EstablishConnection(ctx context.Context, in *pb.InviteRequest) 
 	// Check that all the clients are currently on the server and not already in groups.
 	for _, name := range buddies {
 		if !clientExists(name) {
-			return nil, errors.New("connection failed: the client (" + name + ") isn't registered on the server anymore")
+			return &pb.InviteResponse{Response: false}, errors.New("connection failed: the client (" + name + ") isn't registered on the server anymore")
 		} else if inGroup(name) {
-			return nil, errors.New("connection failed: the client (" + name + ") is already in another group")
+			return &pb.InviteResponse{Response: false}, errors.New("connection failed: the client (" + name + ") is already in another group")
 		}
 	}
 
+	// Now we need to create a group that contains all of the buddies with a single channel.
+	name := genGroupName()
+	groups[name] = make(chan pb.ChatMessage, 100)
+	groupClients[name] = buddies
+
+	return &pb.InviteResponse{Response: true}, nil
 }
 
 func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
