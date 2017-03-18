@@ -95,6 +95,41 @@ func groupExists(gName string) bool {
 	return false
 }
 
+func removeClientFromGroup(name string) error {
+
+	// Look through all the groups.
+	for gName, cList := range groupClients {
+		listG := cList
+		// Look through all the users in the group.
+		for i, cName := range listG {
+			// Remove the user from the group.
+			if cName == name {
+				log.Println("[removeClientFromGroup]: Removed client " + name + " from " + gName)
+				// DEBUG: log.Print("[removeClientFromGroup]: New list of clients in " + gName)
+				log.Print(listG)
+
+				if len(listG) == 1 {
+					delete(groups, gName)
+					delete(groupClients, gName)
+					log.Println("[removeClientFromGroup]: No more members in " + gName + ", removing the group.")
+					log.Print("List of groups: ")
+					for keys := range groups {
+						log.Print(keys)
+					}
+				} else {
+					listG[i] = listG[len(listG)-1]
+					listG = listG[:len(listG)-1]
+					groupClients[gName] = listG
+				}
+
+				return nil
+			}
+		}
+	}
+
+	return errors.New("no user found in the group list. Something went wrong")
+}
+
 func removeClient(name string) error {
 
 	lock.Lock()
@@ -103,24 +138,8 @@ func removeClient(name string) error {
 	if clientExists(name) {
 		delete(clients, name)
 		log.Print("[removeClient]: Removed client " + name)
-
 		if inGroup(name) {
-			// Look through all the groups.
-			for gName := range groupClients {
-				listG := groupClients[gName]
-				// Look through all the users in the group.
-				for i, cName := range listG {
-					// Remove the user from the group.
-					if cName == name {
-						listG[i] = listG[len(listG)-1]
-						listG = listG[:len(listG)-1]
-						groupClients[name] = listG
-						log.Print("[removeClient]: Removed client " + name + " from group " + gName)
-
-						break
-					}
-				}
-			}
+			removeClientFromGroup(name)
 		} else {
 			log.Print("[removeClient]: " + name + " was not in any groups.")
 			return nil
