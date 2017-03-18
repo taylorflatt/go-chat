@@ -247,7 +247,6 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 			stream.Send(&inbox)
 		}
 	}
-
 }
 
 func broadcast(guy string, gName string, msg pb.ChatMessage) {
@@ -255,8 +254,16 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	gChan := groups[gName]
-	gChan <- msg
+	for gn, gChan := range groups {
+		if gn == gName {
+			gChan <- msg
+		}
+	}
+
+	//	gChan := groups[gName]
+	//	gChan <- msg
+
+	log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 	//	for _, buddy := range groupClients[gName] {
 	//		if buddy != guy {
 	//			log.Printf("Friend " + guy + " sent " + gName + " a message: " + msg.Message)

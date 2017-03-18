@@ -299,11 +299,15 @@ func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName stri
 	}
 }
 
+// Check here if the msg coming in is from itself (sender == uName)
 func receiveMessages(stream pb.Chat_RouteChatClient, mailbox chan pb.ChatMessage, gName string) {
 	for {
 		msg, _ := stream.Recv()
-		if msg.Receiver == gName {
-			mailbox <- *msg
-		}
+
+		mailbox <- *msg
+
+		//		if msg.Receiver == gName {
+		//			mailbox <- *msg
+		//		}
 	}
 }
