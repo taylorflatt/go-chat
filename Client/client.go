@@ -33,7 +33,7 @@ func MainMenu() {
 	fmt.Println("Welcome to Go-Chat!")
 	addSpacing(1)
 	fmt.Println("Below is a list of menu options for the chat application.")
-	addSpacing(2)
+	addSpacing(1)
 	fmt.Println("1) Create a Group")
 	fmt.Println("2) View Group List")
 	fmt.Println("3) Exit Chat")
@@ -78,14 +78,18 @@ func main() {
 	var gName string
 
 	// Read the server address
-	fmt.Print("Please specify the server IP: ")
-	t, _ := r.ReadString('\n')
-	t = strings.TrimSpace(t)
-	ts := strings.Split(t, ":")
-	sip := ts[0]
-	sport := ts[1]
+	// DEBUG ONLY:
+	address := "localhost:12021"
 
-	address := sip + ":" + sport
+	// UNCOMMENT AFTER DEBUG
+	//fmt.Print("Please specify the server IP: ")
+	//t, _ := r.ReadString('\n')
+	//t = strings.TrimSpace(t)
+	//ts := strings.Split(t, ":")
+	//sip := ts[0]
+	//sport := ts[1]
+	//address := sip + ":" + sport
+	// END UNCOMMENT
 
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
@@ -141,7 +145,7 @@ func main() {
 				addSpacing(1)
 				fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
 				fmt.Print("Menu> ")
-				gName, err := r.ReadString('\n')
+				gName, err = r.ReadString('\n')
 				gName = strings.TrimSpace(gName)
 				CheckError(err)
 
@@ -154,7 +158,9 @@ func main() {
 						fmt.Println("That group name has already been chosen. Please select a new one.")
 					} else {
 						fmt.Println("Created group named " + gName)
-						addSpacing(3)
+						c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+						fmt.Println("Joined " + gName)
+						addSpacing(1)
 						rCGroup = false
 						rMainMenu = false
 					}
@@ -203,6 +209,7 @@ func main() {
 							rGName = false
 						} else {
 							_, err := c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+							fmt.Println("Joined " + gName)
 
 							if err != nil {
 								fmt.Print("A group with that name doesn't exist. Please check again.")

@@ -177,7 +177,7 @@ func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, er
 	cName := in.Client
 	gName := in.GroupName
 
-	log.Printf("[JoinGroup] Attempting to add " + cName + " to group" + gName)
+	log.Printf("[JoinGroup] Attempting to add " + cName + " to " + gName)
 
 	if groupExists(gName) {
 		addClientToGroup(cName, gName)
@@ -193,9 +193,11 @@ func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, 
 	cName := in.Client
 	gName := in.GroupName
 
+	log.Printf("[CreateGroup] " + cName + " is attempting to create " + gName)
+
 	if !groupExists(gName) {
 		addGroup(gName)
-		addClientToGroup(cName, gName)
+		//addClientToGroup(cName, gName)
 
 		return &pb.Empty{}, nil
 	}
@@ -235,16 +237,20 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 	}
 
 	log.Printf("[RouteChat]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
+	inbox := make(chan pb.ChatMessage, 100)
+	outbox := make(chan pb.ChatMessage, 100)
 
-	gChan := groups[msg.Receiver]
-	go listenToClient(stream, gChan)
+	go listenToClient(stream, outbox)
+
+	//gChan := groups[msg.Receiver]
+	//go listenToClient(stream, gChan)
 
 	for {
 		select {
-		case outbox := <-gChan:
-			broadcast(msg.Sender, msg.Receiver, outbox)
-		case inbox := <-gChan:
-			stream.Send(&inbox)
+		case outMsg := <-outbox:
+			broadcast(msg.Sender, msg.Receiver, outMsg)
+		case inMsg := <-inbox:
+			stream.Send(&inMsg)
 		}
 	}
 }
@@ -256,6 +262,7 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 
 	for gn, gChan := range groups {
 		if gn == gName {
+			log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 			gChan <- msg
 		}
 	}
@@ -263,7 +270,6 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 	//	gChan := groups[gName]
 	//	gChan <- msg
 
-	log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 	//	for _, buddy := range groupClients[gName] {
 	//		if buddy != guy {
 	//			log.Printf("Friend " + guy + " sent " + gName + " a message: " + msg.Message)
