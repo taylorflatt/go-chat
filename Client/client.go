@@ -261,40 +261,27 @@ func main() {
 	fmt.Println("You are now chatting in " + gName)
 	addSpacing(1)
 
-	for {
-		fmt.Print("You> ")
-		in, _ := r.ReadString('\n')
-		fmt.Print(in)
-	}
+	stream, serr := c.RouteChat(context.Background())
 
-	tGName, rerr := c.EstablishConnection(context.Background(), &pb.InviteRequest{Requester: uName, Clients: clientList})
-	gName := tGName.Group
-
-	if rerr != nil {
-		fmt.Print(err)
+	if serr != nil {
+		fmt.Print(serr)
 	} else {
-		stream, serr := c.RouteChat(context.Background())
+		mailBox := make(chan pb.ChatMessage, 100)
+		go receiveMessages(stream, mailBox, gName)
 
-		if serr != nil {
-			fmt.Print(serr)
-		} else {
-			mailBox := make(chan pb.ChatMessage, 100)
-			go receiveMessages(stream, mailBox)
+		sQueue := make(chan pb.ChatMessage, 100)
+		go listenToClient(sQueue, r, uName, gName)
 
-			sQueue := make(chan pb.ChatMessage, 100)
-			go listenToClient(sQueue, r, uName, gName)
-
-			for {
-				select {
-				case toSend := <-sQueue:
-					stream.Send(&toSend)
-				case received := <-mailBox:
-					fmt.Printf("%s> %s", received.Sender, received.Message)
-				}
+		for {
+			select {
+			case toSend := <-sQueue:
+				stream.Send(&toSend)
+			case received := <-mailBox:
+				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}
-
-			//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
 		}
+
+		//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
 	}
 }
 
@@ -306,15 +293,17 @@ func addSpacing(n int) {
 
 func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
 	for {
-		fmt.Print("You: ")
+		//fmt.Print("You> ")
 		msg, _ := reader.ReadString('\n')
 		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
 	}
 }
 
-func receiveMessages(stream pb.Chat_RouteChatClient, mailbox chan pb.ChatMessage) {
+func receiveMessages(stream pb.Chat_RouteChatClient, mailbox chan pb.ChatMessage, gName string) {
 	for {
 		msg, _ := stream.Recv()
-		mailbox <- *msg
+		if msg.Receiver == gName {
+			mailbox <- *msg
+		}
 	}
 }

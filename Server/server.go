@@ -250,18 +250,19 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 
 }
 
-func broadcast(sender string, gName string, msg pb.ChatMessage) {
+func broadcast(guy string, gName string, msg pb.ChatMessage) {
 
 	lock.Lock()
 	defer lock.Unlock()
 
 	gChan := groups[gName]
-	for _, buddy := range groupClients[gName] {
-		if buddy != sender {
-			log.Printf("Client " + sender + " sent " + gName + " a message: " + msg.Message)
-			gChan <- msg
-		}
-	}
+	gChan <- msg
+	//	for _, buddy := range groupClients[gName] {
+	//		if buddy != guy {
+	//			log.Printf("Friend " + guy + " sent " + gName + " a message: " + msg.Message)
+	//			gChan <- msg
+	//		}
+	//	}
 }
 
 func listenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessage) {
@@ -271,7 +272,7 @@ func listenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessa
 		}
 		if err != nil {
 		}
-		log.Printf("Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
+		log.Printf("[listenToClient] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 		messages <- *msg
 	}
 }
