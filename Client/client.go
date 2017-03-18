@@ -6,8 +6,10 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	pb "github.com/taylorflatt/go-chat"
@@ -119,6 +121,22 @@ func main() {
 
 		if err == nil {
 			fmt.Println("Your username: " + uName)
+
+			w := make(chan os.Signal, 1)
+
+			signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
+
+			go func() {
+				sig := <-w
+				fmt.Print(sig)
+				fmt.Print(" used.")
+				fmt.Println("Exiting chat application.")
+
+				if sig == os.Interrupt {
+					c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
+					os.Exit(1)
+				}
+			}()
 			break
 		} else {
 			fmt.Print(err)

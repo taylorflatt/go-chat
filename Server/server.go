@@ -28,8 +28,6 @@ var lock = &sync.RWMutex{}
 
 func clientExists(name string) bool {
 
-	lock.RLock()
-	defer lock.RUnlock()
 	for c := range clients {
 		if c == name {
 			return true
@@ -41,8 +39,6 @@ func clientExists(name string) bool {
 
 func inGroup(name string) bool {
 
-	lock.RLock()
-	defer lock.RUnlock()
 	for _, c := range groupClients {
 		for _, s := range c {
 			if name == s {
@@ -87,8 +83,9 @@ func addClient(name string) error {
 
 func groupExists(gName string) bool {
 
-	lock.RLock()
-	defer lock.RUnlock()
+	// Changed to just LOCK
+	lock.Lock()
+	defer lock.Unlock()
 	for g := range groups {
 		if g == gName {
 			return true
@@ -124,6 +121,9 @@ func removeClient(name string) error {
 					}
 				}
 			}
+		} else {
+			log.Print("[removeClient]: " + name + " was not in any groups.")
+			return nil
 		}
 	}
 
@@ -133,6 +133,9 @@ func removeClient(name string) error {
 func (s *server) UnRegister(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
 	uName := in.Sender
+
+	log.Print("[UnRegister]: Unregistering client " + uName)
+
 	err := removeClient(uName)
 
 	if err != nil {
