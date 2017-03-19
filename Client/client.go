@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -96,25 +95,14 @@ func main() {
 	// Create the client
 	c := pb.NewChatClient(conn)
 
-	// Register the client with the server.
-	for {
-		fmt.Printf("Enter your username: ")
-		tu, err := r.ReadString('\n')
-		if err != nil {
-			fmt.Print(err)
-		}
-		uName = strings.TrimSpace(tu)
+	info, err := TopMenu(c, r)
 
-		_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
-
-		if err == nil {
-			fmt.Println("Your username: " + uName)
-			w := make(chan os.Signal, 1)
-			go ControlExitEarly(w, c, uName)
-			break
-		} else {
-			fmt.Print(err)
-		}
+	if err != nil {
+		fmt.Print(err)
+		os.Exit(1)
+	} else {
+		gName = info[0]
+		uName = info[1]
 	}
 
 	fmt.Println("You are now chatting in " + gName)
