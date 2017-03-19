@@ -4,12 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/fatih/color"
 	pb "github.com/taylorflatt/go-chat"
@@ -17,31 +15,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-// The IP is hardcoded now. But eventually it will not be.
-// Will need to reference Interfaces().
-const (
-	ip = "localhost"
-	//port = 12021
-)
-
-// RandInt32 generates a random int32 between two values.
-func RandInt32(min int32, max int32) int32 {
-	rand.Seed(time.Now().Unix())
-	return min + rand.Int31n(max-min)
-}
-
-func CheckError(err error) {
-	if err != nil {
-		fmt.Print(err)
-	}
-}
-
-func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
-
-	c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
-	os.Exit(1)
-}
-
+// ControlExitEarly handles any interrupts prior to joining a group.
+// Note: This thread will die once the client joins a group.
+// It doesn't return anything.
 func ControlExitEarly(w chan os.Signal, c pb.ChatClient, q chan bool, u string) {
 
 	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
@@ -61,6 +37,8 @@ func ControlExitEarly(w chan os.Signal, c pb.ChatClient, q chan bool, u string) 
 	}
 }
 
+// ControlExitLate handles any interrupts after to joining a group.
+// It doesn't return anything.
 func ControlExitLate(w chan os.Signal, c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
 
 	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
@@ -71,16 +49,41 @@ func ControlExitLate(w chan os.Signal, c pb.ChatClient, stream pb.Chat_RouteChat
 	}
 }
 
+// ExitChat handles removing the client from the server and exiting the program.
+// It doesn't return anything.
+func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
+
+	c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
+	os.Exit(1)
+}
+
+// ListenToClient listens to the client for input and adds that input to the sQueue with
+// the username of the sender, group name, and the message.
+// It doesn't return anything.
+func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
+	for {
+		msg, _ := reader.ReadString('\n')
+		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
+	}
+}
+
+// ReceiveMessages listens on the client's (NOT the client's group) stream and adds any incoming
+// message to the client's inbox.
+// It doesn't return anything.
+func ReceiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
+	for {
+		msg, _ := stream.Recv()
+		inbox <- *msg
+	}
+}
+
 func main() {
 
-	// Read in the user's command.
 	r := bufio.NewReader(os.Stdin)
 
-	// username, groupname
-	var uName string
-	var gName string
+	var uName string // Client username
+	var gName string // Client's chat group
 
-	// Read the server address
 	// DEBUG ONLY:
 	a := "localhost:12021"
 	// UNCOMMENT AFTER DEBUG
@@ -124,8 +127,7 @@ func main() {
 	q <- true
 	go ControlExitLate(w, c, stream, uName, gName)
 
-	// First message always gets dropped. TODO: Figure out why.
-	// Need second message to establish itself with the server and do an announce within the group.
+	// TODO: Find out why the first message is always dropped so an empty message needn't be sent.
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: " joined chat!\n"})
 
@@ -134,10 +136,10 @@ func main() {
 	} else {
 
 		sQueue := make(chan pb.ChatMessage, 100)
-		go listenToClient(sQueue, r, uName, gName)
+		go ListenToClient(sQueue, r, uName, gName)
 
 		inbox := make(chan pb.ChatMessage, 100)
-		go receiveMessages(stream, inbox)
+		go ReceiveMessages(stream, inbox)
 
 		for {
 			select {
@@ -176,19 +178,5 @@ func main() {
 				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}
 		}
-	}
-}
-
-func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
-	for {
-		msg, _ := reader.ReadString('\n')
-		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
-	}
-}
-
-func receiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
-	for {
-		msg, _ := stream.Recv()
-		inbox <- *msg
 	}
 }
