@@ -1,3 +1,10 @@
+/*
+* Author: Taylor Flatt
+*
+* Menu handling system for the chat client.
+*
+ */
+
 package main
 
 import (
@@ -13,17 +20,21 @@ import (
 	pb "github.com/taylorflatt/go-chat"
 )
 
+// Stores the main color for all the entry dialogs.
 const (
 	promptColor = color.FgHiMagenta
 )
 
+// RandColor picks a random from a stored list of colors.
+// It returns a single color attribute.
 func RandColor() color.Attribute {
 
-	//rand.Seed(time.Now().Unix())
 	c := []color.Attribute{color.FgHiCyan, color.FgHiGreen, color.FgHiRed, color.FgHiWhite, color.FgHiYellow, color.FgHiMagenta}
 	return c[(len(c)*rand.Intn(20)+rand.Intn(10)+2)%len(c)]
 }
 
+// AddSpacing adds n-new lines to console.
+// It doesn't return anything.
 func AddSpacing(n int) {
 
 	for i := 0; i < n; i++ {
@@ -31,6 +42,8 @@ func AddSpacing(n int) {
 	}
 }
 
+// StartMessage displays the menu text for after a user connects to the server.
+// It doesn't return anything.
 func StartMessage() {
 
 	AddSpacing(1)
@@ -42,6 +55,8 @@ func StartMessage() {
 	AddSpacing(1)
 }
 
+// WelcomeMessage displays a colored string welcoming the user to the server.
+// It doesn't return anything.
 func WelcomeMessage(u string) {
 
 	AddSpacing(1)
@@ -52,7 +67,9 @@ func WelcomeMessage(u string) {
 	AddSpacing(1)
 }
 
-func MainMenuText() {
+// TopMenuText displays the option text for the main menu.
+// It doesn't return anything.
+func TopMenuText() {
 
 	fmt.Println("Main Menu")
 	AddSpacing(1)
@@ -63,6 +80,8 @@ func MainMenuText() {
 	color.New(promptColor).Print("Main> ")
 }
 
+// GroupMenuText displays the option text for the group menu.
+// It doesn't return anything.
 func GroupMenuText() {
 
 	fmt.Println("View Groups Menu")
@@ -77,6 +96,8 @@ func GroupMenuText() {
 	color.New(promptColor).Print("Groups> ")
 }
 
+// ViewGroupMemMenuText displays option text to view a group.
+// It doesn't return anything.
 func ViewGroupMemMenuText() {
 
 	AddSpacing(1)
@@ -85,11 +106,14 @@ func ViewGroupMemMenuText() {
 	color.New(promptColor).Print("View> ")
 }
 
+// Frame gives some nice formatting structure to the output.
 func Frame() {
 
 	fmt.Println("------------------------------------------")
 }
 
+// SetServer handles the input for the chat server address.
+// It returns a string which contains the ip:port of the chat server.
 func SetServer(r *bufio.Reader) string {
 
 	StartMessage()
@@ -105,6 +129,8 @@ func SetServer(r *bufio.Reader) string {
 	return address
 }
 
+// SetName sets the username for the user.
+// It returns a string containing the username of the client.
 func SetName(c pb.ChatClient, r *bufio.Reader) string {
 	for {
 		fmt.Printf("Enter your username: ")
@@ -131,6 +157,8 @@ func SetName(c pb.ChatClient, r *bufio.Reader) string {
 	}
 }
 
+// CreateGroup handles the create group menu option.
+// It returns a string which contains the keyword !back allowing it to escape the input as well as an error.
 func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error) {
 
 	for {
@@ -160,6 +188,8 @@ func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error)
 	}
 }
 
+// JoinGroup handles the join group menu option.
+// It returns a string which contains the keyword !back allowing it to escape the input.
 func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 
 	for {
@@ -185,6 +215,8 @@ func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 	}
 }
 
+// ListGroups handles listing all of the groups stored on the server.
+// It doesn't return anything.
 func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 
 	t, _ := c.GetGroupList(context.Background(), &pb.Empty{})
@@ -203,6 +235,8 @@ func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 
 }
 
+// ListGroupMembers handles listing the members of a specific group.
+// It returns an error.
 func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 	for {
@@ -238,11 +272,13 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 	}
 }
 
+// TopMenu handles displaying the menu to the client.
+// It returns the group name for the user and an error.
 func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 
 	for {
 		Frame()
-		MainMenuText()
+		TopMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
 
@@ -272,6 +308,8 @@ func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 	}
 }
 
+// DisplayGroupMenu displays the menu for the group options.
+// It returns either an empty string or the keyword !back to navigate to TopMenu.
 func DisplayGroupMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 
 	ListGroups(c, r)
