@@ -7,9 +7,11 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/fatih/color"
 	pb "github.com/taylorflatt/go-chat"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -34,28 +36,39 @@ func CheckError(err error) {
 	}
 }
 
-func ExitChat(c pb.ChatClient, uName string) {
-	c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
+func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
+
+	c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
 	os.Exit(1)
 }
 
-func ControlExitEarly(w chan os.Signal, c pb.ChatClient, uName string) {
+func ControlExitEarly(w chan os.Signal, c pb.ChatClient, q chan bool, u string) {
 
 	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
 
-	sig := <-w
-	fmt.Print(sig)
-	fmt.Println(" used.")
-	fmt.Println("Exiting chat application.")
+	for {
+		select {
+		case sig := <-w:
+			if sig == os.Interrupt {
+				c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
+				os.Exit(1)
+			}
 
-	if sig == os.Interrupt {
-		ExitChat(c, uName)
+			return
+		case <-q:
+			return
+		}
 	}
 }
 
-func ControlExitLate(w chan os.Signal, c pb.ChatClient, uName string) {
+func ControlExitLate(w chan os.Signal, c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
 
-	ExitChat(c, uName)
+	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-w
+
+	if sig == os.Interrupt {
+		ExitChat(c, stream, u, g)
+	}
 }
 
 func main() {
@@ -69,9 +82,9 @@ func main() {
 
 	// Read the server address
 	// DEBUG ONLY:
-	//a := "localhost:12021"
+	a := "localhost:12021"
 	// UNCOMMENT AFTER DEBUG
-	a := SetServer(r)
+	//a := SetServer(r)
 	// END UNCOMMENT
 
 	// Set up a connection to the server.
@@ -89,25 +102,32 @@ func main() {
 	// Create the client
 	c := pb.NewChatClient(conn)
 
-	info, err := TopMenu(c, r)
+	uName = SetName(c, r)
+	w := make(chan os.Signal, 1) // Watch for ctrl+c
+	q := make(chan bool)         // Quit sig
+	go ControlExitEarly(w, c, q, uName)
+	fmt.Print("UserName: " + uName)
+
+	gName, err = TopMenu(c, r, uName)
 
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
 	} else {
-		uName = info[0]
-		gName = info[1]
+		fmt.Print("Group: " + gName)
 	}
 
 	AddSpacing(1)
 	fmt.Println("You are now chatting in " + gName)
 
 	stream, serr := c.RouteChat(context.Background())
+	q <- true
+	go ControlExitLate(w, c, stream, uName, gName)
 
 	// First message always gets dropped. TODO: Figure out why.
 	// Need second message to establish itself with the server and do an announce within the group.
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
-	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " joined chat!\n"})
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: " joined chat!\n"})
 
 	if serr != nil {
 		fmt.Print(serr)
@@ -122,13 +142,39 @@ func main() {
 		for {
 			select {
 			case toSend := <-sQueue:
-				stream.Send(&toSend)
+				switch msg := strings.TrimSpace(toSend.Message); msg {
+				case "!exit":
+					stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
+					ExitChat(c, stream, uName, gName)
+					stream.CloseSend()
+					conn.Close()
+				case "!members":
+					l, err := c.GetGroupClientList(context.Background(), &pb.GroupInfo{GroupName: gName})
+					if err != nil {
+						fmt.Println("There was an error grabbing the current members of the group: " + err.Error())
+					} else {
+						fmt.Println("The current members in the group are: ")
+						fmt.Println(l.Clients)
+					}
+				case "!help":
+					AddSpacing(1)
+					fmt.Println("The following commands are available to you: ")
+					color.New(color.FgHiYellow).Print("   !members")
+					fmt.Print(": Lists the current members in the group.")
+
+					fmt.Println()
+					color.New(color.FgHiYellow).Print("   !exit")
+					fmt.Println(": Leaves the chat server.")
+
+				default:
+					stream.Send(&toSend)
+				}
+
+				//stream.Send(&toSend)
 			case received := <-inbox:
 				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}
 		}
-
-		//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
 	}
 }
 
@@ -139,7 +185,6 @@ func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName stri
 	}
 }
 
-// Check here if the msg coming in is from itself (sender == uName)
 func receiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
 	for {
 		msg, _ := stream.Recv()

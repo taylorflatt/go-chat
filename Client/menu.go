@@ -103,10 +103,9 @@ func SetServer(r *bufio.Reader) string {
 	address := ip + ":" + p
 
 	return address
-
 }
 
-func SetName(r *bufio.Reader) string {
+func SetName(c pb.ChatClient, r *bufio.Reader) string {
 	for {
 		fmt.Printf("Enter your username: ")
 		n, err := r.ReadString('\n')
@@ -114,6 +113,7 @@ func SetName(r *bufio.Reader) string {
 			fmt.Print(err)
 		} else {
 			uName := strings.TrimSpace(n)
+			_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
 			WelcomeMessage(uName)
 			return uName
 		}
@@ -180,6 +180,8 @@ func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 	if len(l) == 0 {
 		color.New(color.FgYellow).Println("There are no groups created yet!")
 	} else {
+		AddSpacing(1)
+		fmt.Println("Current groups able to join:")
 		for i, g := range l {
 			fmt.Println("  " + strconv.Itoa(i+1) + ") " + g)
 		}
@@ -221,11 +223,7 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 	}
 }
 
-func TopMenu(c pb.ChatClient, r *bufio.Reader) ([2]string, error) {
-
-	var o [2]string
-	u := SetName(r)
-	o[0] = u
+func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 
 	for {
 		Frame()
@@ -238,19 +236,17 @@ func TopMenu(c pb.ChatClient, r *bufio.Reader) ([2]string, error) {
 			g, err := CreateGroup(c, r, u)
 
 			if err != nil {
-				return o, err
+				return g, err
 			} else if g != "!back" {
-				o[1] = g
-				return o, nil
+				return g, nil
 			}
 		case "2": // View Group Menu
 			g, err := DisplayGroupMenu(c, r, u)
 
 			if err != nil {
-				return o, err
+				return g, err
 			} else if g != "!back" {
-				o[1] = g
-				return o, nil
+				return g, nil
 			}
 		case "3": // Exit Client
 			c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
