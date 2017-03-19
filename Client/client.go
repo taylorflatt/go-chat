@@ -103,11 +103,7 @@ func main() {
 	var uName string // Client username
 	var gName string // Client's chat group
 
-	// DEBUG ONLY:
-	a := "localhost:12021"
-	// UNCOMMENT AFTER DEBUG
-	//a := SetServer(r)
-	// END UNCOMMENT
+	a := SetServer(r)
 
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(a, grpc.WithInsecure())
