@@ -287,10 +287,12 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 	//	defer lock.Unlock()
 
 	for gn := range groups {
+		log.Printf("Found : " + gn)
 		if gn == gName {
 			log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 
 			for _, cName := range groupClients[gn] {
+				log.Printf("Found client: " + cName)
 				if cName != msg.Sender {
 					log.Printf("[broadcast] Adding the message to " + cName + "'s channel.")
 					clients[cName] <- msg
@@ -317,9 +319,11 @@ func listenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessa
 		if err == io.EOF {
 		}
 		if err != nil {
+		} else {
+			log.Printf("[listenToClient] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
+			messages <- *msg
 		}
-		log.Printf("[listenToClient] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
-		messages <- *msg
+
 	}
 }
 
