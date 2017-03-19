@@ -4,95 +4,334 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	pb "github.com/taylorflatt/go-chat"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
+// The IP is hardcoded now. But eventually it will not be.
+// Will need to reference Interfaces().
 const (
-	port = ":12021"
+	ip = "localhost"
+	//port = 12021
 )
 
+// RandInt32 generates a random int32 between two values.
+func RandInt32(min int32, max int32) int32 {
+	rand.Seed(time.Now().Unix())
+	return min + rand.Int31n(max-min)
+}
+
+func MainMenu() {
+	addSpacing(1)
+	fmt.Println("Welcome to Go-Chat!")
+	addSpacing(1)
+	fmt.Println("Below is a list of menu options for the chat application.")
+	addSpacing(1)
+	fmt.Println("1) Create a Group")
+	fmt.Println("2) View Group List")
+	fmt.Println("3) Exit Chat")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func GroupMenu() {
+	addSpacing(1)
+	fmt.Println("View Groups Menu")
+	addSpacing(1)
+	fmt.Println("Below is a list of menu options for groups.")
+	addSpacing(1)
+	fmt.Println("1) Join a Group")
+	fmt.Println("2) View Group Members")
+	fmt.Println("3) Refresh Group List")
+	fmt.Println("4) Go back")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func ViewGroupMembersMenu() {
+	addSpacing(1)
+	fmt.Println("Enter the group name that you would like to view! Enter !back to go back to the menu.")
+	addSpacing(1)
+	fmt.Print("Menu> ")
+}
+
+func CheckError(err error) {
+	if err != nil {
+		fmt.Print(err)
+	}
+}
+
 func main() {
+
 	// Read in the user's command.
 	r := bufio.NewReader(os.Stdin)
 
+	// username, groupname
+	var uName string
+	var gName string
+
 	// Read the server address
-	fmt.Print("Please specify the server IP: ")
-	address, _ := r.ReadString('\n')
-	address = strings.TrimSpace(address)
-	address = address + port
+	// DEBUG ONLY:
+	address := "localhost:12021"
+
+	// UNCOMMENT AFTER DEBUG
+	//fmt.Print("Please specify the server IP: ")
+	//t, _ := r.ReadString('\n')
+	//t = strings.TrimSpace(t)
+	//ts := strings.Split(t, ":")
+	//sip := ts[0]
+	//sport := ts[1]
+	//address := sip + ":" + sport
+	// END UNCOMMENT
 
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 
 	if err != nil {
 		log.Fatalf("Could not connect: %v", err)
+	} else {
+		fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type !exit.\n", address)
 	}
 
 	// Close the connection after main returns.
 	defer conn.Close()
 
 	// Create the client
-	c := pb.NewRemoteCommandClient(conn)
+	c := pb.NewChatClient(conn)
 
-	fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type exit.\n", address)
+	// Register the client with the server.
+	for {
+		fmt.Printf("Enter your username: ")
+		tu, err := r.ReadString('\n')
+		if err != nil {
+			fmt.Print(err)
+		}
+		uName = strings.TrimSpace(tu)
 
-	for true {
-		fmt.Printf("\nWould you like to group chat (yes/no)?")
-		g, _ := r.ReadString('\n')
+		_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
 
-		if g == "yes" {
-			// Do group chat.
-		} else if g == "no" {
-			// Connect to a client.
-			fmt.Printf("Connectable clients: ")
-			// GET connectable clients from the server.
-			// ENDGET
+		if err == nil {
+			fmt.Println("Your username: " + uName)
 
-			fmt.Printf("\nPlease enter the name of the client to whom you wish to connect as it appears above: ")
-			c, _ := r.ReadString('\n')
+			w := make(chan os.Signal, 1)
 
-			for true {
+			signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
 
-				// This strips off any trailing whitespace/carriage returns.
-				tCmd = strings.TrimSpace(tCmd)
-				tCmd2 := strings.Split(tCmd, " ")
+			go func() {
+				sig := <-w
+				fmt.Print(sig)
+				fmt.Print(" used.")
+				fmt.Println("Exiting chat application.")
 
-				// Parse their input.
-				cmdName := tCmd2[0]
+				if sig == os.Interrupt {
+					c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
 
-				//cmdArgs := []string{}
-				cmdArgs := tCmd2[1:]
-
-				// Close the connection if the user enters exit.
-				if cmdName == "exit" {
-					break
+					os.Exit(1)
 				}
-
-				// Gets the response of the shell comm and from the server.
-				res, err := c.SendCommand(context.Background(), &pb.CommandRequest{CmdName: cmdName, CmdArgs: cmdArgs})
-
-				if err != nil {
-					log.Fatalf("Command failed: %v", err)
-				}
-
-				log.Printf("    %s", res.Output)
-			}
+			}()
+			break
 		} else {
-			fmt.Printf("Please enter either 'yes' for group chat or 'no' for single chat.\n\n")
+			fmt.Print(err)
 		}
 	}
 
-	fmt.Print("\nPlease type the name of the client as it appears above if you wish to connect to it.")
-	fmt.Print("\n$ ")
+	rMainMenu := true
+	for rMainMenu {
+		MainMenu()
+		tc, err := r.ReadString('\n')
+		tc = strings.TrimSpace(tc)
+		CheckError(err)
 
-	fmt.Print("$ ")
-	tCmd, _ := r.ReadString('\n')
+		choice, err := strconv.Atoi(tc)
+		CheckError(err)
 
-	// Keep connection alive until ctrl+c or exit is entered.
+		if choice > 3 || choice < 1 {
+			fmt.Println("Please enter a valid selection between 1 and 3.")
+		} else if choice == 1 {
+			// Create a group
 
+			rCGroup := true
+			for rCGroup {
+				addSpacing(1)
+				fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
+				fmt.Print("Menu> ")
+				gName, err = r.ReadString('\n')
+				gName = strings.TrimSpace(gName)
+				CheckError(err)
+
+				if gName == "!back" {
+					rCGroup = false
+				} else {
+					_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+
+					if nerr != nil {
+						fmt.Println("That group name has already been chosen. Please select a new one.")
+					} else {
+						fmt.Println("Created group named " + gName)
+						c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+						fmt.Println("Joined " + gName)
+						addSpacing(1)
+						rCGroup = false
+						rMainMenu = false
+					}
+				}
+			}
+
+		} else if choice == 2 {
+			// View groups
+			// List the current groups.
+			tr, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+			res := tr.Groups
+
+			if len(res) == 0 {
+				fmt.Println("There are currently no groups created. Go back to the main menu to create one!")
+				addSpacing(1)
+			} else {
+				fmt.Println("List of all groups: ")
+				for i, gName := range res {
+					fmt.Println("  " + strconv.Itoa(i+1) + ") " + gName)
+				}
+			}
+
+			rGMenu := true
+			for rGMenu {
+				GroupMenu()
+				tgc, err := r.ReadString('\n')
+				tgc = strings.TrimSpace(tgc)
+				CheckError(err)
+
+				gChoice, err := strconv.Atoi(tgc)
+				CheckError(err)
+
+				if gChoice > 4 || gChoice < 1 {
+					fmt.Println("Please enter a valid selection between 1 and 4.")
+				} else if gChoice == 1 {
+					// Join a group
+					rGName := true
+					for rGName {
+						fmt.Println("Enter the name of the group as it appears in the group list or enter !back to go back to the Group menu.")
+						fmt.Print("menu> ")
+						gName, _ = r.ReadString('\n')
+						gName = strings.TrimSpace(gName)
+						CheckError(err)
+
+						if gName == "!back" {
+							rGName = false
+						} else {
+							_, err := c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+							fmt.Println("Joined " + gName)
+
+							if err != nil {
+								fmt.Print("A group with that name doesn't exist. Please check again.")
+							} else {
+								rGName = false    // Leave join menu
+								rGMenu = false    // Leave Group menu
+								rMainMenu = false // Leave main menu
+							}
+						}
+					}
+
+				} else if gChoice == 2 {
+					//View Group members for a group
+					ViewGroupMembersMenu()
+
+					rGMemMenu := true
+					for rGMemMenu {
+						gCName, err := r.ReadString('\n')
+						gCName = strings.TrimSpace(gCName)
+						CheckError(err)
+
+						if gCName == "!back" {
+							rGMemMenu = false
+						} else {
+							cList, err := c.GetGroupClientList(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gCName})
+							if err != nil {
+								fmt.Println("Please enter the group name exactly as it appears in the group list!")
+							} else {
+								fmt.Println(cList)
+								rGMemMenu = false
+							}
+						}
+					}
+				} else if gChoice == 3 {
+					// Refresh the group list
+					tr, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+					res := tr.Groups
+
+					for _, gName := range res {
+						fmt.Println("Group: " + gName)
+					}
+
+				} else {
+					// Go back
+					addSpacing(4)
+					rGMenu = false
+				}
+			}
+		} else {
+			// Exit chat client
+			c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
+			os.Exit(0)
+		}
+	}
+
+	fmt.Println("You are now chatting in " + gName)
+	addSpacing(1)
+
+	stream, serr := c.RouteChat(context.Background())
+	// Send some fake message to myself
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " joined chat!\n"})
+
+	if serr != nil {
+		fmt.Print(serr)
+	} else {
+
+		sQueue := make(chan pb.ChatMessage, 100)
+		go listenToClient(sQueue, r, uName, gName)
+
+		inbox := make(chan pb.ChatMessage, 100)
+		go receiveMessages(stream, inbox)
+
+		for {
+			select {
+			case toSend := <-sQueue:
+				stream.Send(&toSend)
+			case received := <-inbox:
+				fmt.Printf("%s> %s", received.Sender, received.Message)
+			}
+		}
+
+		//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
+	}
+}
+
+func addSpacing(n int) {
+	for i := 0; i <= n; i++ {
+		fmt.Println()
+	}
+}
+
+func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
+	for {
+		msg, _ := reader.ReadString('\n')
+		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
+	}
+}
+
+// Check here if the msg coming in is from itself (sender == uName)
+func receiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
+	for {
+		msg, _ := stream.Recv()
+		inbox <- *msg
+	}
 }
