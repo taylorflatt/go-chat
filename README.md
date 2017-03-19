@@ -1,4 +1,4 @@
-# Remote shell [![Build Status] (https://travis-ci.org/taylorflatt/go-chat.svg?branch=master)](https://github.com/taylorflatt/go-chat)
+# Remote shell [![Build Status](https://travis-ci.org/taylorflatt/go-chat.svg?branch=master)](https://travis-ci.org/taylorflatt/go-chat)
 A client-server chat app implemented in Go using gRPC.
 
 ## Usage
