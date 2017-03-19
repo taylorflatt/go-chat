@@ -69,24 +69,18 @@ func main() {
 
 	// Read the server address
 	// DEBUG ONLY:
-	address := "localhost:12021"
+	//a := "localhost:12021"
 	// UNCOMMENT AFTER DEBUG
-	//fmt.Print("Please specify the server IP: ")
-	//t, _ := r.ReadString('\n')
-	//t = strings.TrimSpace(t)
-	//ts := strings.Split(t, ":")
-	//sip := ts[0]
-	//sport := ts[1]
-	//address := sip + ":" + sport
+	a := SetServer(r)
 	// END UNCOMMENT
 
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	conn, err := grpc.Dial(a, grpc.WithInsecure())
 
 	if err != nil {
 		log.Fatalf("Could not connect: %v", err)
 	} else {
-		fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type !exit.\n", address)
+		fmt.Printf("\nYou have successfully connected to %s! To disconnect, hit ctrl+c or type !exit.\n\n", a)
 	}
 
 	// Close the connection after main returns.
@@ -105,10 +99,13 @@ func main() {
 		uName = info[1]
 	}
 
+	AddSpacing(1)
 	fmt.Println("You are now chatting in " + gName)
 
 	stream, serr := c.RouteChat(context.Background())
-	// Send some fake message to myself
+
+	// First message always gets dropped. TODO: Figure out why.
+	// Need second message to establish itself with the server and do an announce within the group.
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " joined chat!\n"})
 
