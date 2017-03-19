@@ -45,6 +45,7 @@ func ControlExitLate(w chan os.Signal, c pb.ChatClient, stream pb.Chat_RouteChat
 	sig := <-w
 
 	if sig == os.Interrupt {
+		stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
 		ExitChat(c, stream, u, g)
 	}
 }
@@ -74,6 +75,24 @@ func ReceiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) 
 	for {
 		msg, _ := stream.Recv()
 		inbox <- *msg
+	}
+}
+
+// DisplayCurrentMembers displays the members who are currently in the group chat.
+// It doesn't return anything.
+func DisplayCurrentMembers(c pb.ChatClient, g string) {
+
+	m, _ := c.GetGroupClientList(context.Background(), &pb.GroupInfo{GroupName: g})
+	if len(m.Clients) > 0 {
+		fmt.Print("Current Members: ")
+		for i := 0; i < len(m.Clients); i++ {
+			if i == len(m.Clients)-1 {
+				fmt.Print(m.Clients[i])
+			} else {
+				fmt.Print(m.Clients[i] + ", ")
+			}
+		}
+		AddSpacing(2)
 	}
 }
 
@@ -115,8 +134,6 @@ func main() {
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(1)
-	} else {
-		fmt.Print("Group: " + gName)
 	}
 
 	AddSpacing(1)
@@ -129,7 +146,9 @@ func main() {
 
 	// TODO: Find out why the first message is always dropped so an empty message needn't be sent.
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
-	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: " joined chat!\n"})
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: "joined chat!\n"})
+
+	DisplayCurrentMembers(c, gName)
 
 	if serr != nil {
 		fmt.Print(serr)
@@ -151,15 +170,7 @@ func main() {
 					stream.CloseSend()
 					conn.Close()
 				case "!members":
-					l, err := c.GetGroupClientList(context.Background(), &pb.GroupInfo{GroupName: gName})
-					if err != nil {
-						fmt.Println("There was an error grabbing the current members of the group: " + err.Error())
-					} else {
-						AddSpacing(1)
-						fmt.Print("The current members in the group are: ")
-						fmt.Println(l.Clients)
-						AddSpacing(1)
-					}
+					DisplayCurrentMembers(c, gName)
 				case "!help":
 					AddSpacing(1)
 					fmt.Println("The following commands are available to you: ")

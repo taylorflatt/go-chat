@@ -57,13 +57,17 @@ func StartMessage() {
 
 // WelcomeMessage displays a colored string welcoming the user to the server.
 // It doesn't return anything.
-func WelcomeMessage(u string) {
+func WelcomeMessage(c pb.ChatClient, u string) {
 
 	AddSpacing(1)
 	u = "Welcome " + u + "!"
 	for _, l := range u {
 		color.New(RandColor()).Print(string(l))
 	}
+	n, _ := c.GetClientList(context.Background(), &pb.Empty{})
+	g, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+
+	fmt.Print(" There are currently " + strconv.Itoa(len(n.Clients)) + " member(s) logged in and " + strconv.Itoa(len(g.Groups)) + " group(s).")
 	AddSpacing(1)
 }
 
@@ -149,7 +153,7 @@ func SetName(c pb.ChatClient, r *bufio.Reader) string {
 					AddSpacing(1)
 					color.New(color.FgHiRed).Println("That username already exists. Please choose a new one! ")
 				} else {
-					WelcomeMessage(uName)
+					WelcomeMessage(c, uName)
 					return uName
 				}
 			}
