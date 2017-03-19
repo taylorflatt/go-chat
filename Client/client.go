@@ -95,8 +95,8 @@ func main() {
 		fmt.Print(err)
 		os.Exit(1)
 	} else {
-		gName = info[0]
-		uName = info[1]
+		uName = info[0]
+		gName = info[1]
 	}
 
 	AddSpacing(1)
