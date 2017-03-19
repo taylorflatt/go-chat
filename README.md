@@ -2,18 +2,20 @@
 A client-server chat app implemented in Go using gRPC.
 
 ## Usage
-* First, run the server by going to the Server directory and typing `go run server.go`.
-* Next, run the client by going to the Client directory and typing `go run client.go`. 
-* Then, enter in the IP:Port to the server.
-* Now, choose whether you would like to group chat or single chat.
-* Next, type in the client(s) you would like to connect to.
-* Finally, you can type any messages that you would like to send/receive.
+### Server
+Start the server by running `go run server.go`. Alternatively, you can run `go build` while in the Server directory.
+### Client
+Start the client(s) by running `go run client.go menu.go`. Alternatively, you can run `go build` while in the Client directory.
+
+To run navigate the client: 
+* First enter the server ip:port exactly. It is likely `localhost:12021` unless the port at the top of server.go has changed.
+* Then you'll enter a username that is yours for the session.
+* Finally, you are greeted by the menu system which will allow you to create, join, or view other members and groups.
 
 ## Known Bugs
-* If you type ctrl + c while in a chat, it will crash the server. This bug is known and I just need to implement the fix for it. To properly exit the chat, type `!exit` instead.
-* The UI is clunky at the moment. I plan on spending a bit of time on UX in the near future. It goes without saying that cleaning up the code is also a top priority.
+* None currently. If you run into any problems, please don't hesistate to create an issue.
 
 ## Notes
-To disconnect from the server, press ctrl+c or type `!exit` (hit enter) and the client will disconnect from the server.
-
-This client/server assumes a 12021 server port. This can be changed in the server.go file near the top.
+* To disconnect from the server, press ctrl+c or type `!exit` (hit enter) and the client will disconnect from the server.
+* To move backwards in the menu system, you can type `!back` (hit enter).
+* This client/server assumes a 12021 server port. This can be changed in the server.go file near the top.

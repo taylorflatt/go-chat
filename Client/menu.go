@@ -1,3 +1,10 @@
+/*
+* Author: Taylor Flatt
+*
+* Menu handling system for the chat client.
+*
+ */
+
 package main
 
 import (
@@ -13,24 +20,30 @@ import (
 	pb "github.com/taylorflatt/go-chat"
 )
 
+// Stores the main color for all the entry dialogs.
 const (
 	promptColor = color.FgHiMagenta
 )
 
+// RandColor picks a random from a stored list of colors.
+// It returns a single color attribute.
 func RandColor() color.Attribute {
 
-	//rand.Seed(time.Now().Unix())
 	c := []color.Attribute{color.FgHiCyan, color.FgHiGreen, color.FgHiRed, color.FgHiWhite, color.FgHiYellow, color.FgHiMagenta}
 	return c[(len(c)*rand.Intn(20)+rand.Intn(10)+2)%len(c)]
 }
 
+// AddSpacing adds n-new lines to console.
+// It doesn't return anything.
 func AddSpacing(n int) {
 
-	for i := 0; i <= n; i++ {
+	for i := 0; i < n; i++ {
 		fmt.Println()
 	}
 }
 
+// StartMessage displays the menu text for after a user connects to the server.
+// It doesn't return anything.
 func StartMessage() {
 
 	AddSpacing(1)
@@ -42,17 +55,25 @@ func StartMessage() {
 	AddSpacing(1)
 }
 
-func WelcomeMessage(u string) {
+// WelcomeMessage displays a colored string welcoming the user to the server.
+// It doesn't return anything.
+func WelcomeMessage(c pb.ChatClient, u string) {
 
 	AddSpacing(1)
 	u = "Welcome " + u + "!"
 	for _, l := range u {
 		color.New(RandColor()).Print(string(l))
 	}
+	n, _ := c.GetClientList(context.Background(), &pb.Empty{})
+	g, _ := c.GetGroupList(context.Background(), &pb.Empty{})
+
+	fmt.Print(" There are currently " + strconv.Itoa(len(n.Clients)) + " member(s) logged in and " + strconv.Itoa(len(g.Groups)) + " group(s).")
 	AddSpacing(1)
 }
 
-func MainMenuText() {
+// TopMenuText displays the option text for the main menu.
+// It doesn't return anything.
+func TopMenuText() {
 
 	fmt.Println("Main Menu")
 	AddSpacing(1)
@@ -63,6 +84,8 @@ func MainMenuText() {
 	color.New(promptColor).Print("Main> ")
 }
 
+// GroupMenuText displays the option text for the group menu.
+// It doesn't return anything.
 func GroupMenuText() {
 
 	fmt.Println("View Groups Menu")
@@ -77,6 +100,8 @@ func GroupMenuText() {
 	color.New(promptColor).Print("Groups> ")
 }
 
+// ViewGroupMemMenuText displays option text to view a group.
+// It doesn't return anything.
 func ViewGroupMemMenuText() {
 
 	AddSpacing(1)
@@ -85,11 +110,14 @@ func ViewGroupMemMenuText() {
 	color.New(promptColor).Print("View> ")
 }
 
+// Frame gives some nice formatting structure to the output.
 func Frame() {
 
 	fmt.Println("------------------------------------------")
 }
 
+// SetServer handles the input for the chat server address.
+// It returns a string which contains the ip:port of the chat server.
 func SetServer(r *bufio.Reader) string {
 
 	StartMessage()
@@ -105,6 +133,8 @@ func SetServer(r *bufio.Reader) string {
 	return address
 }
 
+// SetName sets the username for the user.
+// It returns a string containing the username of the client.
 func SetName(c pb.ChatClient, r *bufio.Reader) string {
 	for {
 		fmt.Printf("Enter your username: ")
@@ -113,42 +143,57 @@ func SetName(c pb.ChatClient, r *bufio.Reader) string {
 			fmt.Print(err)
 		} else {
 			uName := strings.TrimSpace(n)
-			_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
-			WelcomeMessage(uName)
-			return uName
+			if len(uName) < 3 {
+				AddSpacing(1)
+				color.New(color.FgHiRed).Println("Your username must be at least 3 characters long.")
+			} else {
+				_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
+
+				if err != nil {
+					AddSpacing(1)
+					color.New(color.FgHiRed).Println("That username already exists. Please choose a new one! ")
+				} else {
+					WelcomeMessage(c, uName)
+					return uName
+				}
+			}
 		}
 	}
 }
 
+// CreateGroup handles the create group menu option.
+// It returns a string which contains the keyword !back allowing it to escape the input as well as an error.
 func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error) {
 
 	for {
 		AddSpacing(1)
 		fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
-		color.New(promptColor).Print("Group Name> ")
-		gName, err := r.ReadString('\n')
-		gName = strings.TrimSpace(gName)
+		color.New(promptColor).Print("Join> ")
+		g, err := r.ReadString('\n')
+		g = strings.TrimSpace(g)
 
 		if err != nil {
 			return "", err
-		} else if gName != "!back" {
-			_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+		} else if g != "!back" {
+			_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: g})
 
 			if nerr != nil {
 				AddSpacing(1)
-				color.New(color.FgRed).Println("That group name has already been chosen. Please select a new one.")
+				color.New(color.FgRed).Println("The group name \"" + g + "\" has already been chosen. Please select a new one.")
 			} else {
-				c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+				c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: g})
 				AddSpacing(1)
-				color.New(color.FgGreen).Println("Created and joined group named " + gName)
-				return gName, nil
+				color.New(color.FgGreen).Println("Created and joined group named " + g)
+				return g, nil
 			}
 		} else {
-			return gName, nil
+			return g, nil
 		}
 	}
 }
 
+// JoinGroup handles the join group menu option.
+// It returns a string which contains the keyword !back allowing it to escape the input.
 func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 
 	for {
@@ -164,7 +209,9 @@ func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 		_, err := c.JoinGroup(context.Background(), &pb.GroupInfo{Client: u, GroupName: g})
 
 		if err != nil {
-			color.New(color.FgRed).Print("A group with that name doesn't exist. Please check again.")
+			AddSpacing(1)
+			color.New(color.FgRed).Println("The group name \"" + g + "\" doesn't exist. Please check again.")
+			AddSpacing(1)
 		} else {
 			color.New(color.FgGreen).Println("Joined " + g)
 			return g
@@ -172,12 +219,15 @@ func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 	}
 }
 
+// ListGroups handles listing all of the groups stored on the server.
+// It doesn't return anything.
 func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 
 	t, _ := c.GetGroupList(context.Background(), &pb.Empty{})
 	l := t.Groups
 
 	if len(l) == 0 {
+		AddSpacing(1)
 		color.New(color.FgYellow).Println("There are no groups created yet!")
 	} else {
 		AddSpacing(1)
@@ -189,6 +239,8 @@ func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 
 }
 
+// ListGroupMembers handles listing the members of a specific group.
+// It returns an error.
 func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 	for {
@@ -196,6 +248,7 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 		n := len(t.Groups)
 
 		if n == 0 {
+			AddSpacing(2)
 			color.New(color.FgYellow).Println("There are currently no groups created!")
 			return nil
 		}
@@ -223,11 +276,13 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 	}
 }
 
+// TopMenu handles displaying the menu to the client.
+// It returns the group name for the user and an error.
 func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 
 	for {
 		Frame()
-		MainMenuText()
+		TopMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
 
@@ -257,6 +312,8 @@ func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 	}
 }
 
+// DisplayGroupMenu displays the menu for the group options.
+// It returns either an empty string or the keyword !back to navigate to TopMenu.
 func DisplayGroupMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
 
 	ListGroups(c, r)
@@ -279,7 +336,9 @@ func DisplayGroupMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error
 			break
 		case "3": // Join Group
 			g := JoinGroup(c, r, u)
-			return g, nil
+			if g != "!back" {
+				return g, nil
+			}
 		case "4": // Go Back
 			return "!back", nil
 		default: // Error
