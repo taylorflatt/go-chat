@@ -134,6 +134,7 @@ func main() {
 
 				if sig == os.Interrupt {
 					c.UnRegister(context.Background(), &pb.ClientInfo{Sender: uName})
+
 					os.Exit(1)
 				}
 			}()
@@ -287,21 +288,25 @@ func main() {
 	addSpacing(1)
 
 	stream, serr := c.RouteChat(context.Background())
+	// Send some fake message to myself
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
+	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " joined chat!\n"})
 
 	if serr != nil {
 		fmt.Print(serr)
 	} else {
-		mailBox := make(chan pb.ChatMessage, 100)
-		go receiveMessages(stream, mailBox, gName)
 
 		sQueue := make(chan pb.ChatMessage, 100)
 		go listenToClient(sQueue, r, uName, gName)
+
+		inbox := make(chan pb.ChatMessage, 100)
+		go receiveMessages(stream, inbox)
 
 		for {
 			select {
 			case toSend := <-sQueue:
 				stream.Send(&toSend)
-			case received := <-mailBox:
+			case received := <-inbox:
 				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}
 		}
@@ -318,21 +323,15 @@ func addSpacing(n int) {
 
 func listenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
 	for {
-		//fmt.Print("You> ")
 		msg, _ := reader.ReadString('\n')
 		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
 	}
 }
 
 // Check here if the msg coming in is from itself (sender == uName)
-func receiveMessages(stream pb.Chat_RouteChatClient, mailbox chan pb.ChatMessage, gName string) {
+func receiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
 	for {
 		msg, _ := stream.Recv()
-
-		mailbox <- *msg
-
-		//		if msg.Receiver == gName {
-		//			mailbox <- *msg
-		//		}
+		inbox <- *msg
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -106,7 +107,6 @@ func removeClientFromGroup(name string) error {
 			if cName == name {
 				log.Println("[removeClientFromGroup]: Removed client " + name + " from " + gName)
 				// DEBUG: log.Print("[removeClientFromGroup]: New list of clients in " + gName)
-				log.Print(listG)
 
 				if len(listG) == 1 {
 					delete(groups, gName)
@@ -120,6 +120,7 @@ func removeClientFromGroup(name string) error {
 					listG[i] = listG[len(listG)-1]
 					listG = listG[:len(listG)-1]
 					groupClients[gName] = listG
+					log.Print(listG)
 				}
 
 				return nil
@@ -152,6 +153,9 @@ func removeClient(name string) error {
 func (s *server) UnRegister(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
 	uName := in.Sender
+
+	cChan := clients[uName]
+	fmt.Print(cChan)
 
 	log.Print("[UnRegister]: Unregistering client " + uName)
 
@@ -259,7 +263,7 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 	}
 
 	log.Printf("[RouteChat]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
-	inbox := make(chan pb.ChatMessage, 100)
+	//inbox := groups[msg.Receiver]
 	outbox := make(chan pb.ChatMessage, 100)
 
 	go listenToClient(stream, outbox)
@@ -271,7 +275,7 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		select {
 		case outMsg := <-outbox:
 			broadcast(msg.Sender, msg.Receiver, outMsg)
-		case inMsg := <-inbox:
+		case inMsg := <-clients[msg.Sender]:
 			stream.Send(&inMsg)
 		}
 	}
@@ -279,13 +283,19 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 
 func broadcast(guy string, gName string, msg pb.ChatMessage) {
 
-	lock.Lock()
-	defer lock.Unlock()
+	//	lock.Lock()
+	//	defer lock.Unlock()
 
-	for gn, gChan := range groups {
+	for gn := range groups {
 		if gn == gName {
 			log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
-			gChan <- msg
+
+			for _, cName := range groupClients[gn] {
+				if cName != msg.Sender {
+					log.Printf("[broadcast] Adding the message to " + cName + "'s channel.")
+					clients[cName] <- msg
+				}
+			}
 		}
 	}
 
@@ -301,6 +311,7 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 }
 
 func listenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessage) {
+
 	for {
 		msg, err := stream.Recv()
 		if err == io.EOF {
