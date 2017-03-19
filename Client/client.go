@@ -15,10 +15,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ControlExitEarly handles any interrupts prior to joining a group.
-// Note: This thread will die once the client joins a group.
+// ControlExit handles any interrupts during program execution.
+// Note: The routine control is dictated by the existence of a stream. If one is present, the user is in a group and needs
+// to be removed. Otherwise, the user is still in the menu system.
 // It doesn't return anything.
-func ControlExitEarly(w chan os.Signal, c pb.ChatClient, q chan bool, u string) {
+func ControlExit(w chan os.Signal, c pb.ChatClient, q chan bool, stream pb.Chat_RouteChatClient, u string, g string) {
 
 	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
 
@@ -26,27 +27,21 @@ func ControlExitEarly(w chan os.Signal, c pb.ChatClient, q chan bool, u string) 
 		select {
 		case sig := <-w:
 			if sig == os.Interrupt {
+				if stream != nil {
+					stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
+					ExitChat(c, stream, u, g)
+					return
+				}
+
 				c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
 				os.Exit(1)
+				return
 			}
-
-			return
-		case <-q:
-			return
+		case stop := <-q:
+			if stop { // Stop thread.
+				return
+			}
 		}
-	}
-}
-
-// ControlExitLate handles any interrupts after to joining a group.
-// It doesn't return anything.
-func ControlExitLate(w chan os.Signal, c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g string) {
-
-	signal.Notify(w, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-w
-
-	if sig == os.Interrupt {
-		stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
-		ExitChat(c, stream, u, g)
 	}
 }
 
@@ -63,6 +58,9 @@ func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g strin
 // It doesn't return anything.
 func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
 	for {
+		// TODO: When a user joins the channel, it effectively appends that join message to the You>.
+		// 		 Need to find a way to get around this issue.
+		//fmt.Print("You> ")
 		msg, _ := reader.ReadString('\n')
 		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
 	}
@@ -122,8 +120,9 @@ func main() {
 
 	uName = SetName(c, r)
 	w := make(chan os.Signal, 1) // Watch for ctrl+c
-	q := make(chan bool)         // Quit sig
-	go ControlExitEarly(w, c, q, uName)
+	q := make(chan bool)         // Watch for which exit routine to run.
+	//go ControlExitEarly(w, c, q1, uName)
+	go ControlExit(w, c, q, nil, uName, gName)
 
 	gName, err = TopMenu(c, r, uName)
 
@@ -137,8 +136,8 @@ func main() {
 	Frame()
 
 	stream, serr := c.RouteChat(context.Background())
-	q <- true
-	go ControlExitLate(w, c, stream, uName, gName)
+	q <- true // Stop the old thread and start a new one with the stream passed in.
+	go ControlExit(w, c, q, stream, uName, gName)
 
 	// TODO: Find out why the first message is always dropped so an empty message needn't be sent.
 	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
@@ -165,6 +164,16 @@ func main() {
 					ExitChat(c, stream, uName, gName)
 					stream.CloseSend()
 					conn.Close()
+				case "!leave":
+					// This functionality hasn't been added yet!
+					_, err := c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+
+					if err != nil {
+						color.New(color.FgHiRed).Print("Failed to leave room due to the user or group no longer existing! ")
+					} else {
+
+					}
+
 				case "!members":
 					DisplayCurrentMembers(c, gName)
 				case "!help":
@@ -186,4 +195,8 @@ func main() {
 			}
 		}
 	}
+}
+
+func LeaveRoom(c pb.ChatClient, u string, g string) {
+
 }

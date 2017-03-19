@@ -19,6 +19,8 @@ service Chat {
     rpc GetGroupClientList(GroupInfo) returns (ClientList) {}
 
     rpc GetClientList(Empty) returns (ClientList) {}
+
+    rpc LeaveRoom(GroupInfo) returns (Empty) {}
 }
 
 message Empty {

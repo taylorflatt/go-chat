@@ -282,6 +282,21 @@ func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, er
 	return &pb.Empty{}, errors.New("a group with that name doesn't exist")
 }
 
+func (s *server) LeaveRoom(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
+
+	u := in.Client
+	g := in.GroupName
+
+	if !GroupExists(g) {
+		return &pb.Empty{}, errors.New("the group " + g + " doesn't exist")
+	} else if !ClientExists(u) {
+		return &pb.Empty{}, errors.New("the client " + g + " doesn't exist")
+	} else {
+		RemoveClientFromGroup(u)
+		return &pb.Empty{}, nil
+	}
+}
+
 // RouteChat handles the routing of all messages on the stream.
 // It returns an error.
 func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
