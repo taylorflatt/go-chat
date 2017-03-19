@@ -153,8 +153,10 @@ func main() {
 					if err != nil {
 						fmt.Println("There was an error grabbing the current members of the group: " + err.Error())
 					} else {
-						fmt.Println("The current members in the group are: ")
+						AddSpacing(1)
+						fmt.Print("The current members in the group are: ")
 						fmt.Println(l.Clients)
+						AddSpacing(1)
 					}
 				case "!help":
 					AddSpacing(1)
@@ -162,16 +164,14 @@ func main() {
 					color.New(color.FgHiYellow).Print("   !members")
 					fmt.Print(": Lists the current members in the group.")
 
-					fmt.Println()
+					AddSpacing(1)
 					color.New(color.FgHiYellow).Print("   !exit")
 					fmt.Println(": Leaves the chat server.")
-					fmt.Println()
+					AddSpacing(1)
 
 				default:
 					stream.Send(&toSend)
 				}
-
-				//stream.Send(&toSend)
 			case received := <-inbox:
 				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}

@@ -71,15 +71,10 @@ func addGroup(gName string) {
 	log.Print("[addGroup]: Added group " + gName)
 }
 
-func addClient(name string) error {
+func addClient(name string) {
 
-	if !clientExists(name) {
-		clients[name] = make(chan pb.ChatMessage, 100)
-		log.Print("[addClient]: Registered client " + name)
-		return nil
-	}
-
-	return errors.New("client (" + name + ") already exists")
+	clients[name] = make(chan pb.ChatMessage, 100)
+	log.Print("[addClient]: Registered client " + name)
 }
 
 func groupExists(gName string) bool {
@@ -233,14 +228,13 @@ func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, 
 
 func (s *server) Register(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
-	err := addClient(in.Sender)
-
-	if err != nil {
-		return nil, err
+	n := in.Sender
+	if clientExists(n) {
+		return nil, errors.New("that name already exists")
 	}
 
+	addClient(n)
 	return &pb.Empty{}, nil
-
 }
 
 func (s *server) GetClientList(ctx context.Context, in *pb.Empty) (*pb.ClientList, error) {
@@ -287,12 +281,10 @@ func broadcast(guy string, gName string, msg pb.ChatMessage) {
 	//	defer lock.Unlock()
 
 	for gn := range groups {
-		log.Printf("Found : " + gn)
 		if gn == gName {
 			log.Printf("[broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
 
 			for _, cName := range groupClients[gn] {
-				log.Printf("Found client: " + cName)
 				if cName != msg.Sender {
 					log.Printf("[broadcast] Adding the message to " + cName + "'s channel.")
 					clients[cName] <- msg

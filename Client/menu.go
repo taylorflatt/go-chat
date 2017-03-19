@@ -113,9 +113,20 @@ func SetName(c pb.ChatClient, r *bufio.Reader) string {
 			fmt.Print(err)
 		} else {
 			uName := strings.TrimSpace(n)
-			_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
-			WelcomeMessage(uName)
-			return uName
+			if len(uName) < 3 {
+				AddSpacing(1)
+				color.New(color.FgHiRed).Println("Your username must be at least 3 characters long.")
+			} else {
+				_, err = c.Register(context.Background(), &pb.ClientInfo{Sender: uName})
+
+				if err != nil {
+					AddSpacing(1)
+					color.New(color.FgHiRed).Println("That username already exists. Please choose a new one! ")
+				} else {
+					WelcomeMessage(uName)
+					return uName
+				}
+			}
 		}
 	}
 }
@@ -126,25 +137,25 @@ func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error)
 		AddSpacing(1)
 		fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
 		color.New(promptColor).Print("Join> ")
-		gName, err := r.ReadString('\n')
-		gName = strings.TrimSpace(gName)
+		g, err := r.ReadString('\n')
+		g = strings.TrimSpace(g)
 
 		if err != nil {
 			return "", err
-		} else if gName != "!back" {
-			_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+		} else if g != "!back" {
+			_, nerr := c.CreateGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: g})
 
 			if nerr != nil {
 				AddSpacing(1)
-				color.New(color.FgRed).Println("That group name has already been chosen. Please select a new one.")
+				color.New(color.FgRed).Println("The group name \"" + g + "\" has already been chosen. Please select a new one.")
 			} else {
-				c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+				c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: g})
 				AddSpacing(1)
-				color.New(color.FgGreen).Println("Created and joined group named " + gName)
-				return gName, nil
+				color.New(color.FgGreen).Println("Created and joined group named " + g)
+				return g, nil
 			}
 		} else {
-			return gName, nil
+			return g, nil
 		}
 	}
 }
@@ -165,7 +176,7 @@ func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 
 		if err != nil {
 			AddSpacing(1)
-			color.New(color.FgRed).Println("A group with that name (" + g + ") doesn't exist. Please check again.")
+			color.New(color.FgRed).Println("The group name \"" + g + "\" doesn't exist. Please check again.")
 			AddSpacing(1)
 		} else {
 			color.New(color.FgGreen).Println("Joined " + g)
