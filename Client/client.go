@@ -106,7 +106,6 @@ func main() {
 	}
 
 	fmt.Println("You are now chatting in " + gName)
-	addSpacing(1)
 
 	stream, serr := c.RouteChat(context.Background())
 	// Send some fake message to myself
@@ -133,12 +132,6 @@ func main() {
 		}
 
 		//stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName})
-	}
-}
-
-func addSpacing(n int) {
-	for i := 0; i <= n; i++ {
-		fmt.Println()
 	}
 }
 

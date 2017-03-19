@@ -11,41 +11,59 @@ import (
 	pb "github.com/taylorflatt/go-chat"
 )
 
-func MainMenuText() {
-	addSpacing(1)
+func AddSpacing(n int) {
+	for i := 0; i <= n; i++ {
+		fmt.Println()
+	}
+}
+
+func LoginMessage() {
+	AddSpacing(1)
 	fmt.Println("Welcome to Go-Chat!")
-	addSpacing(1)
-	fmt.Println("Below is a list of menu options for the chat application.")
-	addSpacing(1)
+	Frame()
+	fmt.Println("In order to begin chatting, you must first chose a username. It cannot be one that is already\n" +
+		"in user on the server. Remember, your username only lasts for as long as you are logged into\n" +
+		"the server!")
+	AddSpacing(1)
+}
+
+func WelcomeMessage(u string) {
+	AddSpacing(1)
+	fmt.Println("Welcome, " + u + "!")
+}
+
+func MainMenuText() {
+	fmt.Println("Main Menu")
+	AddSpacing(1)
 	fmt.Println("1) Create a Group")
 	fmt.Println("2) View Group List")
 	fmt.Println("3) Exit Chat")
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Print("Menu> ")
 }
 
 func GroupMenuText() {
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Println("View Groups Menu")
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Println("Below is a list of menu options for groups.")
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Println("1) Join a Group")
 	fmt.Println("2) View Group Members")
 	fmt.Println("3) Refresh Group List")
 	fmt.Println("4) Go back")
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Print("Menu> ")
 }
 
 func ViewGroupMemMenuText() {
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Println("Enter the group name that you would like to view! Enter !back to go back to the menu.")
-	addSpacing(1)
+	AddSpacing(1)
 	fmt.Print("Menu> ")
 }
 
-func frame() {
+func Frame() {
 	fmt.Println("------------------------------------------")
 }
 
@@ -57,7 +75,7 @@ func SetName(r *bufio.Reader) string {
 			fmt.Print(err)
 		} else {
 			uName := strings.TrimSpace(n)
-			fmt.Println("Welcome, " + uName + "!")
+			WelcomeMessage(uName)
 			return uName
 		}
 	}
@@ -66,7 +84,7 @@ func SetName(r *bufio.Reader) string {
 func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error) {
 
 	for {
-		addSpacing(1)
+		AddSpacing(1)
 		fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
 		fmt.Print("Menu> ")
 		gName, err := r.ReadString('\n')
@@ -82,6 +100,7 @@ func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error)
 			} else {
 				c.JoinGroup(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
 				fmt.Println("Created and joined group named " + gName)
+				return gName, nil
 			}
 		} else {
 			return gName, nil
@@ -155,12 +174,14 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 func TopMenu(c pb.ChatClient, r *bufio.Reader) ([2]string, error) {
 
+	LoginMessage()
+
 	var o [2]string
 	u := SetName(r)
 	o[0] = u
 
 	for {
-		frame()
+		Frame()
 		MainMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
@@ -168,7 +189,6 @@ func TopMenu(c pb.ChatClient, r *bufio.Reader) ([2]string, error) {
 		switch input := i; input {
 		case "1": // Create group
 			g, err := CreateGroup(c, r, u)
-			JoinGroup(c, r, u)
 
 			if err != nil {
 				return o, err
@@ -199,7 +219,7 @@ func DisplayGroupMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error
 	ListGroups(c, r)
 
 	for {
-		frame()
+		Frame()
 		GroupMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
