@@ -26,7 +26,7 @@ func RandColor() color.Attribute {
 
 func AddSpacing(n int) {
 
-	for i := 0; i <= n; i++ {
+	for i := 0; i < n; i++ {
 		fmt.Println()
 	}
 }
@@ -125,7 +125,7 @@ func CreateGroup(c pb.ChatClient, r *bufio.Reader, uName string) (string, error)
 	for {
 		AddSpacing(1)
 		fmt.Println("Enter the name of the group or type !back to go back to the main menu.")
-		color.New(promptColor).Print("Group Name> ")
+		color.New(promptColor).Print("Join> ")
 		gName, err := r.ReadString('\n')
 		gName = strings.TrimSpace(gName)
 
@@ -164,7 +164,9 @@ func JoinGroup(c pb.ChatClient, r *bufio.Reader, u string) string {
 		_, err := c.JoinGroup(context.Background(), &pb.GroupInfo{Client: u, GroupName: g})
 
 		if err != nil {
-			color.New(color.FgRed).Print("A group with that name doesn't exist. Please check again.")
+			AddSpacing(1)
+			color.New(color.FgRed).Println("A group with that name (" + g + ") doesn't exist. Please check again.")
+			AddSpacing(1)
 		} else {
 			color.New(color.FgGreen).Println("Joined " + g)
 			return g
@@ -178,6 +180,7 @@ func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 	l := t.Groups
 
 	if len(l) == 0 {
+		AddSpacing(1)
 		color.New(color.FgYellow).Println("There are no groups created yet!")
 	} else {
 		AddSpacing(1)
@@ -196,6 +199,7 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 		n := len(t.Groups)
 
 		if n == 0 {
+			AddSpacing(2)
 			color.New(color.FgYellow).Println("There are currently no groups created!")
 			return nil
 		}
@@ -279,7 +283,9 @@ func DisplayGroupMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error
 			break
 		case "3": // Join Group
 			g := JoinGroup(c, r, u)
-			return g, nil
+			if g != "!back" {
+				return g, nil
+			}
 		case "4": // Go Back
 			return "!back", nil
 		default: // Error

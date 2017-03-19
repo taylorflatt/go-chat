@@ -106,7 +106,6 @@ func main() {
 	w := make(chan os.Signal, 1) // Watch for ctrl+c
 	q := make(chan bool)         // Quit sig
 	go ControlExitEarly(w, c, q, uName)
-	fmt.Print("UserName: " + uName)
 
 	gName, err = TopMenu(c, r, uName)
 
@@ -118,7 +117,8 @@ func main() {
 	}
 
 	AddSpacing(1)
-	fmt.Println("You are now chatting in " + gName)
+	fmt.Println("You are now chatting in " + gName + ".")
+	Frame()
 
 	stream, serr := c.RouteChat(context.Background())
 	q <- true
@@ -165,6 +165,7 @@ func main() {
 					fmt.Println()
 					color.New(color.FgHiYellow).Print("   !exit")
 					fmt.Println(": Leaves the chat server.")
+					fmt.Println()
 
 				default:
 					stream.Send(&toSend)
