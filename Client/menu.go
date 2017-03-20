@@ -108,7 +108,6 @@ func ViewGroupMemMenuText() {
 	AddSpacing(1)
 	fmt.Println("Enter the group name that you would like to view! Enter !back to go back to the menu.")
 	AddSpacing(1)
-	color.New(promptColor).Print("View> ")
 }
 
 // Frame gives some nice formatting structure to the output.
@@ -245,6 +244,7 @@ func ListGroups(c pb.ChatClient, r *bufio.Reader) {
 func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 	for {
+		color.New(promptColor).Print("View> ")
 		t, _ := c.GetGroupList(context.Background(), &pb.Empty{})
 		n := len(t.Groups)
 
@@ -279,19 +279,17 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 // TopMenu handles displaying the menu to the client.
 // It returns the group name for the user and an error.
-//func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
-func TopMenu(c pb.ChatClient, u string) (string, error) {
+func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
+	//func TopMenu(c pb.ChatClient, u string) (string, error) {
 	log.Println("In TopMenu")
 
-	r := bufio.NewReader(os.Stdin)
+	//r := bufio.NewReader(os.Stdin)
 
 	for {
 		Frame()
 		TopMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
-
-		log.Println("AFTER i")
 
 		switch input := i; input {
 		case "1": // Create group

@@ -282,6 +282,8 @@ func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, er
 	return &pb.Empty{}, errors.New("a group with that name doesn't exist")
 }
 
+// LeaveRoom removes the user from their group.
+// It returns an empty object and an error.
 func (s *server) LeaveRoom(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
 
 	u := in.Client
@@ -293,6 +295,13 @@ func (s *server) LeaveRoom(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, er
 		return &pb.Empty{}, errors.New("the client " + g + " doesn't exist")
 	} else {
 		RemoveClientFromGroup(u)
+		log.Println("[LeaveRoom]: Removed client from their group and sending !leave message.")
+		msg := pb.ChatMessage{Sender: u, Receiver: u, Message: "!leave"}
+		select {
+		case clients[u] <- msg:
+		default:
+		}
+
 		return &pb.Empty{}, nil
 	}
 }
