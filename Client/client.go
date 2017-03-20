@@ -58,15 +58,20 @@ func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g strin
 // It doesn't return anything.
 func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
 
+	log.Println("[ListenToClient]: Starting.")
+
 	for {
 		// TODO: When a user joins the channel, it effectively appends that join message to the You>.
 		// 		 Need to find a way to get around this issue.
 		//fmt.Print("You> ")
 		msg, _ := reader.ReadString('\n')
 		if strings.TrimSpace(msg) == "!leave" {
+			log.Println("[ListenToClient]: Stopping.")
 			sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
 			return
 		}
+		log.Println("[ListenToClient]: Adding message to send queue.")
+
 		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
 	}
 }
@@ -76,19 +81,31 @@ func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName stri
 // It doesn't return anything.
 func ReceiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage, u string) {
 
+	log.Println("[ReceiveMessages]: Starting.")
+
 	var test bool
 	for {
 		if test {
+			log.Println("[ReceiveMessages]: Stopping.")
 			return
 		}
 
+		log.Println("[ReceiveMessages]: Listening for incoming messages.")
 		msg, _ := stream.Recv()
-		if strings.TrimSpace(msg.Message) == u+" left chat!\n" {
+		log.Println("[ReceiveMessages]: I see " + msg.Message)
+		if msg.Message == "!leave" {
+			log.Println("[ReceiveMessages]: Found special signal!")
 			test = true
 		}
 		inbox <- *msg
-
 	}
+
+	//for {
+	//	log.Println("[ReceiveMessages]: Listening for incoming messages.")
+	//	msg, _ := stream.Recv()
+	//	log.Println("[ReceiveMessages]: Found " + msg.Message + " from " + msg.Sender)
+	//	inbox <- *msg
+	//}
 }
 
 // DisplayCurrentMembers displays the members who are currently in the group chat.
@@ -137,6 +154,9 @@ func main() {
 	inMenu := true               // Control whether the user sees the menu or exits.
 	w := make(chan os.Signal, 1) // Watch for ctrl+c
 	q := make(chan bool)         // Watch for which exit routine to run.
+	f := true                    // Signals for space allocation for the channels.
+	var sQueue chan pb.ChatMessage
+	var inbox chan pb.ChatMessage
 
 	go ControlExit(w, c, q, nil, uName, gName)
 
@@ -166,30 +186,37 @@ func main() {
 		if serr != nil {
 			fmt.Print(serr)
 		} else {
+			if f {
+				sQueue = make(chan pb.ChatMessage, 100)
+				inbox = make(chan pb.ChatMessage, 100)
+			}
 
-			sQueue := make(chan pb.ChatMessage, 100)
 			go ListenToClient(sQueue, r, uName, gName)
-
-			inbox := make(chan pb.ChatMessage, 100)
 			go ReceiveMessages(stream, inbox, uName)
 
 			for !inMenu {
+				log.Println("[Main]: Begin for-loop.")
 				select {
 				case toSend := <-sQueue:
 					switch msg := strings.TrimSpace(toSend.Message); msg {
 					case "!members":
+						log.Println("[Main]: Stuck in !members.")
 						DisplayCurrentMembers(c, gName)
-					case "!leave":
-						stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
-						c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
-						stream.CloseSend()
-						inMenu = true
+					//case "!leave":
+					//	log.Println("[Main]: Stuck in !leave.")
+					//	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
+					//	c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+					//	stream.CloseSend()
+					//	inMenu = true
+					//	f = false
 					case "!exit":
+						log.Println("[Main]: Stuck in !exit.")
 						stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
 						ExitChat(c, stream, uName, gName)
 						stream.CloseSend()
 						conn.Close()
 					case "!help":
+						log.Println("[Main]: Stuck in !help.")
 						AddSpacing(1)
 						fmt.Println("The following commands are available to you: ")
 						color.New(color.FgHiYellow).Print("   !members")
@@ -201,11 +228,16 @@ func main() {
 						AddSpacing(1)
 
 					default:
+						log.Println("[Main]: Sending the message.")
 						stream.Send(&toSend)
 					}
 				case received := <-inbox:
-					fmt.Printf("%s> %s", received.Sender, received.Message)
+					log.Println("[Main]: Receiving the message.")
+					if received.Message != "!leave" {
+						fmt.Printf("%s> %s", received.Sender, received.Message)
+					}
 				}
+				log.Println("[Main]: End for-loop.")
 			}
 		}
 	}
