@@ -56,23 +56,40 @@ func ExitChat(c pb.ChatClient, stream pb.Chat_RouteChatClient, u string, g strin
 // ListenToClient listens to the client for input and adds that input to the sQueue with
 // the username of the sender, group name, and the message.
 // It doesn't return anything.
-func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string) {
+func ListenToClient(sQueue chan pb.ChatMessage, reader *bufio.Reader, uName string, gName string, q chan bool) {
 	for {
-		// TODO: When a user joins the channel, it effectively appends that join message to the You>.
-		// 		 Need to find a way to get around this issue.
-		//fmt.Print("You> ")
-		msg, _ := reader.ReadString('\n')
-		sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
+
+		select {
+		case s := <-q:
+			if s {
+				return
+			}
+		default:
+			// TODO: When a user joins the channel, it effectively appends that join message to the You>.
+			// 		 Need to find a way to get around this issue.
+			//fmt.Print("You> ")
+			msg, _ := reader.ReadString('\n')
+			sQueue <- pb.ChatMessage{Sender: uName, Message: msg, Receiver: gName}
+		}
 	}
 }
 
 // ReceiveMessages listens on the client's (NOT the client's group) stream and adds any incoming
 // message to the client's inbox.
 // It doesn't return anything.
-func ReceiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage) {
+func ReceiveMessages(stream pb.Chat_RouteChatClient, inbox chan pb.ChatMessage, q chan bool) {
+
 	for {
-		msg, _ := stream.Recv()
-		inbox <- *msg
+
+		select {
+		case s := <-q:
+			if s {
+				return
+			}
+		default:
+			msg, _ := stream.Recv()
+			inbox <- *msg
+		}
 	}
 }
 
@@ -119,84 +136,96 @@ func main() {
 	c := pb.NewChatClient(conn)
 
 	uName = SetName(c, r)
+	inMenu := true
 	w := make(chan os.Signal, 1) // Watch for ctrl+c
 	q := make(chan bool)         // Watch for which exit routine to run.
+
 	//go ControlExitEarly(w, c, q1, uName)
 	go ControlExit(w, c, q, nil, uName, gName)
 
-	gName, err = TopMenu(c, r, uName)
+	for inMenu {
+		test := make(chan bool)
+		log.Println("ENTERING MENU SYSTEM NOW!")
+		gName, err = TopMenu(c, uName)
+		log.Println("LEAVING MENU SYSTEM")
 
-	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
-	}
+		if err != nil {
+			fmt.Print(err)
+			os.Exit(1)
+		}
 
-	AddSpacing(1)
-	fmt.Println("You are now chatting in " + gName + ".")
-	Frame()
+		inMenu = false
+		AddSpacing(1)
+		fmt.Println("You are now chatting in " + gName + ".")
+		Frame()
 
-	stream, serr := c.RouteChat(context.Background())
-	q <- true // Stop the old thread and start a new one with the stream passed in.
-	go ControlExit(w, c, q, stream, uName, gName)
+		stream, serr := c.RouteChat(context.Background())
+		q <- true // Stop the old thread and start a new one with the stream passed in.
+		go ControlExit(w, c, q, stream, uName, gName)
 
-	// TODO: Find out why the first message is always dropped so an empty message needn't be sent.
-	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
-	stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: "joined chat!\n"})
+		// TODO: Find out why the first message is always dropped so an empty message needn't be sent.
+		stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: ""})
+		stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: "joined chat!\n"})
 
-	DisplayCurrentMembers(c, gName)
+		DisplayCurrentMembers(c, gName)
 
-	if serr != nil {
-		fmt.Print(serr)
-	} else {
+		if serr != nil {
+			fmt.Print(serr)
+		} else {
 
-		sQueue := make(chan pb.ChatMessage, 100)
-		go ListenToClient(sQueue, r, uName, gName)
+			sQueue := make(chan pb.ChatMessage, 100)
+			go ListenToClient(sQueue, r, uName, gName, test)
 
-		inbox := make(chan pb.ChatMessage, 100)
-		go ReceiveMessages(stream, inbox)
+			inbox := make(chan pb.ChatMessage, 100)
+			go ReceiveMessages(stream, inbox, test)
 
-		for {
-			select {
-			case toSend := <-sQueue:
-				switch msg := strings.TrimSpace(toSend.Message); msg {
-				case "!exit":
-					stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
-					ExitChat(c, stream, uName, gName)
-					stream.CloseSend()
-					conn.Close()
-				case "!leave":
-					// This functionality hasn't been added yet!
-					_, err := c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
+			for !inMenu {
+				select {
+				case toSend := <-sQueue:
+					switch msg := strings.TrimSpace(toSend.Message); msg {
+					case "!exit":
+						stream.Send(&pb.ChatMessage{Sender: uName, Receiver: gName, Message: uName + " left chat!\n"})
+						ExitChat(c, stream, uName, gName)
+						stream.CloseSend()
+						conn.Close()
+					case "!leave":
+						// This functionality hasn't been added yet!
+						_, err := c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: uName, GroupName: gName})
 
-					if err != nil {
-						color.New(color.FgHiRed).Print("Failed to leave room due to the user or group no longer existing! ")
-					} else {
+						if err != nil {
+							color.New(color.FgHiRed).Print("Failed to leave room due to the user or group no longer existing! ")
+						} else {
+							stream.CloseSend()
+							select {
+							case test <- true:
+							default:
+							}
 
+							close(test)
+							log.Println("DROPPING TO MENU SYSTEM NOW!")
+							inMenu = true
+						}
+
+					case "!members":
+						DisplayCurrentMembers(c, gName)
+					case "!help":
+						AddSpacing(1)
+						fmt.Println("The following commands are available to you: ")
+						color.New(color.FgHiYellow).Print("   !members")
+						fmt.Print(": Lists the current members in the group.")
+
+						AddSpacing(1)
+						color.New(color.FgHiYellow).Print("   !exit")
+						fmt.Println(": Leaves the chat server.")
+						AddSpacing(1)
+
+					default:
+						stream.Send(&toSend)
 					}
-
-				case "!members":
-					DisplayCurrentMembers(c, gName)
-				case "!help":
-					AddSpacing(1)
-					fmt.Println("The following commands are available to you: ")
-					color.New(color.FgHiYellow).Print("   !members")
-					fmt.Print(": Lists the current members in the group.")
-
-					AddSpacing(1)
-					color.New(color.FgHiYellow).Print("   !exit")
-					fmt.Println(": Leaves the chat server.")
-					AddSpacing(1)
-
-				default:
-					stream.Send(&toSend)
+				case received := <-inbox:
+					fmt.Printf("%s> %s", received.Sender, received.Message)
 				}
-			case received := <-inbox:
-				fmt.Printf("%s> %s", received.Sender, received.Message)
 			}
 		}
 	}
-}
-
-func LeaveRoom(c pb.ChatClient, u string, g string) {
-
 }

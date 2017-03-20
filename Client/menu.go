@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -278,13 +279,19 @@ func ListGroupMembers(c pb.ChatClient, r *bufio.Reader, u string) error {
 
 // TopMenu handles displaying the menu to the client.
 // It returns the group name for the user and an error.
-func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
+//func TopMenu(c pb.ChatClient, r *bufio.Reader, u string) (string, error) {
+func TopMenu(c pb.ChatClient, u string) (string, error) {
+	log.Println("In TopMenu")
+
+	r := bufio.NewReader(os.Stdin)
 
 	for {
 		Frame()
 		TopMenuText()
 		i, _ := r.ReadString('\n')
 		i = strings.TrimSpace(i)
+
+		log.Println("AFTER i")
 
 		switch input := i; input {
 		case "1": // Create group
