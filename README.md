@@ -19,3 +19,8 @@ To run navigate the client:
 * To disconnect from the server, press ctrl+c or type `!exit` (hit enter) and the client will disconnect from the server.
 * To move backwards in the menu system, you can type `!back` (hit enter).
 * This client/server assumes a 12021 server port. This can be changed in the server.go file near the top.
+
+## Future Ideas
+* The !leave function to leave a chat and go back to the main menu.
+* Encryption on chat channels.
+* Ability to send files.
