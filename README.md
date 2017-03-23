@@ -24,3 +24,4 @@ To run navigate the client:
 * The !leave function to leave a chat and go back to the main menu.
 * Encryption on chat channels.
 * Ability to send files.
+* Complete server re-write to be more extendible and understandable.
