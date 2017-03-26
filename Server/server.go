@@ -36,8 +36,8 @@ type Client struct {
 }
 
 var lock = &sync.RWMutex{}
-var clients map[string]Client
-var groups map[string]Group
+var clients map[string]*Client
+var groups map[string]*Group
 
 // AddClient adds a new client n to the server.
 // It doesn't return anything.
@@ -46,7 +46,7 @@ func AddClient(n string) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	c := Client{
+	c := &Client{
 		name:      n,
 		ch:        make(chan pb.ChatMessage, 100),
 		WaitGroup: &sync.WaitGroup{},
@@ -63,7 +63,7 @@ func AddGroup(n string) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	g := Group{
+	g := &Group{
 		name:      n,
 		ch:        make(chan pb.ChatMessage, 100),
 		WaitGroup: &sync.WaitGroup{},
@@ -120,6 +120,7 @@ func InGroup(n string) bool {
 	return false
 }
 
+//////NOT CHECKED
 // RemoveClient will remove a client from the server as well as any
 // groups that they are currently in.
 // It returns an error.
@@ -144,21 +145,43 @@ func RemoveClient(name string) error {
 
 // AddClientToGroup will add a client to a group.
 // It doesn't return anything.
-func AddClientToGroup(cName string, gName string) {
+func AddClientToGroup(c string, g string) {
 
-	lock.Lock()
-	defer lock.Unlock()
-	cList := groupClients[gName]
-	cList = append(cList, cName)
-	groupClients[gName] = cList
+	//lock.Lock()
+	//defer lock.Unlock()
 
-	log.Println("[AddClientToGroup] Added " + cName + " to " + gName)
+	groups[g].WaitGroup.Add(1)
+	defer groups[g].WaitGroup.Done()
+
+	groups[g].clients = append(groups[g].clients, c)
+	clients[c].group = g
+
+	log.Println("[AddClientToGroup] Added " + c + " to " + g)
 }
 
 // RemoveClientFromGroup will remove a client from a specific group. It will also
 // delete a group if the client is the last one leaving it.
 // It returns an error.
-func RemoveClientFromGroup(name string) error {
+func RemoveClientFromGroup(n string) error {
+
+	for _, g := range groups {
+		for i, c := range g.clients {
+			if n == c {
+				if len(g.clients) == 1 {
+					clients[n].group = ""
+					delete(groups, g.name)
+				} else {
+					c := g.clients
+					c[i] = c[len(c)-1]
+					c = c[:len(c)-1]
+					g.clients = c
+				}
+
+				return nil
+			}
+		}
+
+	}
 
 	// Look through all the groups.
 	for gName, cList := range groupClients {
