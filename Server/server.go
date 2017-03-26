@@ -35,8 +35,8 @@ type Client struct {
 }
 
 var lock = &sync.RWMutex{}
-var clients map[string]*Client
-var groups map[string]*Group
+var clients = make(map[string]*Client)
+var groups = make(map[string]*Group)
 
 // AddClient adds a new client n to the server.
 // It doesn't return anything.
@@ -75,12 +75,12 @@ func AddGroup(n string) {
 
 // ClientExists checks if a client exists on the server.
 // It returns a bool value.
-func ClientExists(name string) bool {
+func ClientExists(n string) bool {
 
 	lock.RLock()
 	defer lock.RUnlock()
 	for c := range clients {
-		if c == name {
+		if c == n {
 			return true
 		}
 	}
@@ -123,6 +123,9 @@ func InGroup(n string) bool {
 // groups that they are currently in.
 // It returns an error.
 func RemoveClient(name string) error {
+
+	// TODO: There is some deadlock here when a user attempts to quit
+	// 		 the chat app with !exit.
 
 	lock.Lock()
 	defer lock.Unlock()
