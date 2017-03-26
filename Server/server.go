@@ -22,6 +22,32 @@ const (
 // Server is used to implement the RemoteCommandServer
 type server struct{}
 
+type Group struct {
+	name      string
+	ch        chan pb.ChatMessage
+	clients   []string
+	WaitGroup *sync.WaitGroup
+}
+
+type Client struct {
+	name      string
+	ch        chan pb.ChatMessage
+	WaitGroup *sync.WaitGroup
+}
+
+func AddGroup(n string) *Group {
+
+	g := &Group{
+		name:      n,
+		ch:        make(chan pb.ChatMessage, 100),
+		WaitGroup: &sync.WaitGroup{},
+	}
+
+	g.WaitGroup.Add(1)
+	return g
+
+}
+
 // Clients: A list of unique clients and a channel per client.
 // Groups: A list of unique groups and a channel per group.
 // GroupClients: A list of Groups and a list of all clients in that group.
