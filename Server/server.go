@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -19,26 +18,69 @@ const (
 	port = ":12021"
 )
 
-// Server is used to implement the RemoteCommandServer
 type server struct{}
 
-// Clients: A list of unique clients and a channel per client.
-// Groups: A list of unique groups and a channel per group.
-// GroupClients: A list of Groups and a list of all clients in that group.
-// Note: Messages within a group are sent to that group's channel and then routed
-//       to each client channel who is part of that group EXCEPT the sender's channel.
-var clients = make(map[string]chan pb.ChatMessage, 100)
-var groups = make(map[string]chan pb.ChatMessage, 100)
-var groupClients = make(map[string][]string)
+type Group struct {
+	name      string
+	ch        chan pb.ChatMessage
+	clients   []string
+	WaitGroup *sync.WaitGroup
+}
+
+type Client struct {
+	name      string
+	groups    []string
+	ch        chan pb.ChatMessage
+	WaitGroup *sync.WaitGroup
+}
 
 var lock = &sync.RWMutex{}
+var clients = make(map[string]*Client)
+var groups = make(map[string]*Group)
+
+// AddClient adds a new client n to the server.
+// It doesn't return anything.
+func AddClient(n string) {
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	c := &Client{
+		name:      n,
+		ch:        make(chan pb.ChatMessage, 100),
+		WaitGroup: &sync.WaitGroup{},
+	}
+
+	log.Print("[AddClient]: Registered client " + n)
+	clients[n] = c
+}
+
+// AddGroup adds a new group to the server.
+// It doesn't return anything.
+func AddGroup(n string) {
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	g := &Group{
+		name:      n,
+		ch:        make(chan pb.ChatMessage, 100),
+		WaitGroup: &sync.WaitGroup{},
+	}
+
+	log.Print("[AddGroup]: Added group " + g.name)
+	groups[n] = g
+	groups[n].WaitGroup.Add(1)
+}
 
 // ClientExists checks if a client exists on the server.
 // It returns a bool value.
-func ClientExists(name string) bool {
+func ClientExists(n string) bool {
 
+	lock.RLock()
+	defer lock.RUnlock()
 	for c := range clients {
-		if c == name {
+		if c == n {
 			return true
 		}
 	}
@@ -50,9 +92,8 @@ func ClientExists(name string) bool {
 // It returns a bool value.
 func GroupExists(gName string) bool {
 
-	// Changed to just LOCK
-	lock.Lock()
-	defer lock.Unlock()
+	lock.RLock()
+	defer lock.RUnlock()
 	for g := range groups {
 		if g == gName {
 			return true
@@ -65,42 +106,26 @@ func GroupExists(gName string) bool {
 // InGroup checks whether a client is currently in a
 // specific group.
 // It returns a bool value.
-func InGroup(name string) bool {
+func InGroup(n string) bool {
 
-	for _, c := range groupClients {
-		for _, s := range c {
-			if name == s {
+	for _, g := range groups {
+		for _, c := range g.clients {
+			if n == c {
 				return true
 			}
 		}
 	}
 
 	return false
-
-}
-
-// AddClient adds a new client to the server.
-// It doesn't return anything.
-func AddClient(name string) {
-
-	clients[name] = make(chan pb.ChatMessage, 100)
-	log.Print("[AddClient]: Registered client " + name)
-}
-
-// AddGroup adds a new group to the server.
-// It doesn't return anything.
-func AddGroup(gName string) {
-
-	lock.Lock()
-	defer lock.Unlock()
-	groups[gName] = make(chan pb.ChatMessage, 100)
-	log.Print("[AddGroup]: Added group " + gName)
 }
 
 // RemoveClient will remove a client from the server as well as any
 // groups that they are currently in.
 // It returns an error.
 func RemoveClient(name string) error {
+
+	// TODO: There is some deadlock here when a user attempts to quit
+	// 		 the chat app with !exit.
 
 	lock.Lock()
 	defer lock.Unlock()
@@ -121,45 +146,45 @@ func RemoveClient(name string) error {
 
 // AddClientToGroup will add a client to a group.
 // It doesn't return anything.
-func AddClientToGroup(cName string, gName string) {
+func AddClientToGroup(c string, g string) {
 
-	lock.Lock()
-	defer lock.Unlock()
-	cList := groupClients[gName]
-	cList = append(cList, cName)
-	groupClients[gName] = cList
+	//lock.Lock()
+	//defer lock.Unlock()
 
-	log.Println("[AddClientToGroup] Added " + cName + " to " + gName)
+	groups[g].WaitGroup.Add(1)
+	defer groups[g].WaitGroup.Done()
+
+	groups[g].clients = append(groups[g].clients, c)
+	clients[c].groups = append(clients[c].groups, g)
+
+	log.Println("[AddClientToGroup] Added " + c + " to " + g)
 }
 
 // RemoveClientFromGroup will remove a client from a specific group. It will also
 // delete a group if the client is the last one leaving it.
 // It returns an error.
-func RemoveClientFromGroup(name string) error {
+func RemoveClientFromGroup(n string) error {
 
-	// Look through all the groups.
-	for gName, cList := range groupClients {
-		listG := cList
-		// Look through all the users in the group.
-		for i, cName := range listG {
-			// Remove the user from the group.
-			if cName == name {
-				log.Println("[RemoveClientFromGroup]: Removed client " + name + " from " + gName)
-				if len(listG) == 1 {
-					delete(groups, gName)
-					delete(groupClients, gName)
-					log.Println("[RemoveClientFromGroup]: No more members in " + gName + ", removing the group.")
-					log.Print("List of groups: ")
-					for keys := range groups {
-						log.Print(keys)
+	for _, g := range groups {
+		for i, c := range g.clients {
+			if n == c {
+				c := clients[n].groups
+				// Remove the group from the user.
+				for i, _ := range c {
+					if n == g.name {
+						c[i] = c[len(c)-1]
+						c = c[:len(c)-1]
+						clients[n].groups = c
 					}
-				} else {
-					listG[i] = listG[len(listG)-1]
-					listG = listG[:len(listG)-1]
-					groupClients[gName] = listG
-					log.Print(listG)
 				}
-
+				if len(g.clients) == 1 {
+					delete(groups, g.name)
+				} else {
+					c := g.clients
+					c[i] = c[len(c)-1]
+					c = c[:len(c)-1]
+					g.clients = c
+				}
 				return nil
 			}
 		}
@@ -172,12 +197,15 @@ func RemoveClientFromGroup(name string) error {
 // It returns a list of connected clients.
 func (s *server) GetClientList(ctx context.Context, in *pb.Empty) (*pb.ClientList, error) {
 
-	var conClients []string
+	var c []string
 	for key := range clients {
-		conClients = append(conClients, key)
+		c = append(c, key)
 	}
 
-	return &pb.ClientList{Clients: conClients}, nil
+	log.Print("[GetClientList]: Returned list of current groups ")
+	log.Print(c)
+
+	return &pb.ClientList{Clients: c}, nil
 }
 
 // GetGroupList will get all of the groups currently registered on the server.
@@ -199,18 +227,18 @@ func (s *server) GetGroupList(ctx context.Context, in *pb.Empty) (*pb.GroupList,
 // It returns a list of clients belonging to a group.
 func (s *server) GetGroupClientList(ctx context.Context, in *pb.GroupInfo) (*pb.ClientList, error) {
 
-	gName := in.GroupName
+	g := in.GroupName
 
-	if !GroupExists(gName) {
+	if !GroupExists(g) {
 		return &pb.ClientList{}, errors.New("that group doesn't exist")
 	}
 
-	cList := groupClients[gName]
+	lst := groups[g].clients
 
-	log.Print("[GetGroupClientList]: For group " + gName + " returned members ")
-	log.Print(cList)
+	log.Print("[GetGroupClientList]: For group " + g + " returned members ")
+	log.Print(lst)
 
-	return &pb.ClientList{Clients: cList}, nil
+	return &pb.ClientList{Clients: lst}, nil
 }
 
 // Register will add the user to the server's collection of users (and by extension restrict the username).
@@ -231,14 +259,18 @@ func (s *server) Register(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, er
 // It returns an empty object and an error.
 func (s *server) UnRegister(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
-	uName := in.Sender
+	u := in.Sender
 
-	cChan := clients[uName]
-	fmt.Print(cChan)
+	log.Print("[UnRegister]: Unregistering client " + u)
 
-	log.Print("[UnRegister]: Unregistering client " + uName)
+	err := RemoveClient(u)
 
-	err := RemoveClient(uName)
+	log.Println("[UnRegister]: The following are the remaining clients, ")
+	keys := []string{}
+	for _, c := range clients {
+		keys = append(keys, c.name)
+	}
+	log.Println(keys)
 
 	if err != nil {
 		return nil, err
@@ -268,18 +300,37 @@ func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, 
 // It returns an empty object and an error.
 func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
 
-	cName := in.Client
-	gName := in.GroupName
+	c := in.Client
+	g := in.GroupName
 
-	log.Printf("[JoinGroup] Attempting to add " + cName + " to " + gName)
+	log.Printf("[JoinGroup] Attempting to add " + c + " to " + g)
 
-	if GroupExists(gName) {
-		AddClientToGroup(cName, gName)
+	if GroupExists(g) {
+		AddClientToGroup(c, g)
 
 		return &pb.Empty{}, nil
 	}
 
 	return &pb.Empty{}, errors.New("a group with that name doesn't exist")
+}
+
+// LeaveRoom removes the user from their group.
+// It returns an empty object and an error.
+func (s *server) LeaveRoom(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
+
+	u := in.Client
+	g := in.GroupName
+
+	if !GroupExists(g) {
+		return &pb.Empty{}, errors.New("the group " + g + " doesn't exist")
+	} else if !ClientExists(u) {
+		return &pb.Empty{}, errors.New("the client " + g + " doesn't exist")
+	} else {
+		die := pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"}
+		Broadcast(g, die)
+		RemoveClientFromGroup(u)
+		return &pb.Empty{}, nil
+	}
 }
 
 // RouteChat handles the routing of all messages on the stream.
@@ -293,6 +344,7 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 	}
 
 	log.Printf("[RouteChat]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
+
 	outbox := make(chan pb.ChatMessage, 100)
 
 	go ListenToClient(stream, outbox)
@@ -301,7 +353,11 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		select {
 		case outMsg := <-outbox:
 			Broadcast(msg.Receiver, outMsg)
-		case inMsg := <-clients[msg.Sender]:
+		case inMsg := <-clients[msg.Sender].ch:
+			log.Println("Sending message to channel: ")
+			log.Println(clients[msg.Sender])
+			log.Println("[LOOK HERE]: Sending message to STREAM: ")
+			log.Println(stream)
 			stream.Send(&inMsg)
 		}
 	}
@@ -316,13 +372,17 @@ func Broadcast(gName string, msg pb.ChatMessage) {
 	defer lock.Unlock()
 
 	for gn := range groups {
+		log.Printf("[Broadcast]: I found " + gn + ".")
 		if gn == gName {
-			log.Printf("[Broadcast] Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
-
-			for _, cName := range groupClients[gn] {
-				if cName != msg.Sender {
-					log.Printf("[Broadcast] Adding the message to " + cName + "'s channel.")
-					clients[cName] <- msg
+			log.Printf("[Broadcast]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
+			for _, c := range groups[gn].clients {
+				log.Printf("[Broadcast]: I found " + c + " in gName")
+				if c == msg.Sender && msg.Message == msg.Sender+" left chat!\n" {
+					log.Printf("[Broadcast]: ADDING THE KILL MESSAGE TO " + c)
+					clients[c].ch <- msg
+				} else if c != msg.Sender {
+					log.Printf("[Broadcast] Adding the message to " + c + "'s channel.")
+					clients[c].ch <- msg
 				}
 			}
 		}
