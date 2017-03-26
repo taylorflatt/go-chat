@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -120,7 +119,6 @@ func InGroup(n string) bool {
 	return false
 }
 
-//////NOT CHECKED
 // RemoveClient will remove a client from the server as well as any
 // groups that they are currently in.
 // It returns an error.
@@ -169,7 +167,7 @@ func RemoveClientFromGroup(n string) error {
 			if n == c {
 				c := clients[n].groups
 				// Remove the group from the user.
-				for i, gn := range c {
+				for i, _ := range c {
 					if n == g.name {
 						c[i] = c[len(c)-1]
 						c = c[:len(c)-1]
@@ -258,19 +256,16 @@ func (s *server) Register(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, er
 // It returns an empty object and an error.
 func (s *server) UnRegister(ctx context.Context, in *pb.ClientInfo) (*pb.Empty, error) {
 
-	uName := in.Sender
+	u := in.Sender
 
-	cChan := clients[uName]
-	fmt.Print(cChan)
+	log.Print("[UnRegister]: Unregistering client " + u)
 
-	log.Print("[UnRegister]: Unregistering client " + uName)
-
-	err := RemoveClient(uName)
+	err := RemoveClient(u)
 
 	log.Println("[UnRegister]: The following are the remaining clients, ")
 	keys := []string{}
-	for key := range clients {
-		keys = append(keys, key)
+	for _, c := range clients {
+		keys = append(keys, c.name)
 	}
 	log.Println(keys)
 
@@ -302,13 +297,13 @@ func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, 
 // It returns an empty object and an error.
 func (s *server) JoinGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, error) {
 
-	cName := in.Client
-	gName := in.GroupName
+	c := in.Client
+	g := in.GroupName
 
-	log.Printf("[JoinGroup] Attempting to add " + cName + " to " + gName)
+	log.Printf("[JoinGroup] Attempting to add " + c + " to " + g)
 
-	if GroupExists(gName) {
-		AddClientToGroup(cName, gName)
+	if GroupExists(g) {
+		AddClientToGroup(c, g)
 
 		return &pb.Empty{}, nil
 	}
@@ -355,7 +350,7 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		select {
 		case outMsg := <-outbox:
 			Broadcast(msg.Receiver, outMsg)
-		case inMsg := <-clients[msg.Sender]:
+		case inMsg := <-clients[msg.Sender].ch:
 			log.Println("Sending message to channel: ")
 			log.Println(clients[msg.Sender])
 			log.Println("[LOOK HERE]: Sending message to STREAM: ")
@@ -377,14 +372,14 @@ func Broadcast(gName string, msg pb.ChatMessage) {
 		log.Printf("[Broadcast]: I found " + gn + ".")
 		if gn == gName {
 			log.Printf("[Broadcast]: Client " + msg.Sender + " sent " + msg.Receiver + " a message: " + msg.Message)
-			for _, cName := range groupClients[gn] {
-				log.Printf("[Broadcast]: I found " + cName + " in gName")
-				if cName == msg.Sender && msg.Message == msg.Sender+" left chat!\n" {
-					log.Printf("[Broadcast]: ADDING THE KILL MESSAGE TO " + cName)
-					clients[cName] <- msg
-				} else if cName != msg.Sender {
-					log.Printf("[Broadcast] Adding the message to " + cName + "'s channel.")
-					clients[cName] <- msg
+			for _, c := range groups[gn].clients {
+				log.Printf("[Broadcast]: I found " + c + " in gName")
+				if c == msg.Sender && msg.Message == msg.Sender+" left chat!\n" {
+					log.Printf("[Broadcast]: ADDING THE KILL MESSAGE TO " + c)
+					clients[c].ch <- msg
+				} else if c != msg.Sender {
+					log.Printf("[Broadcast] Adding the message to " + c + "'s channel.")
+					clients[c].ch <- msg
 				}
 			}
 		}
