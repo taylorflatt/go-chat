@@ -19,7 +19,6 @@ const (
 	port = ":12021"
 )
 
-// Server is used to implement the RemoteCommandServer
 type server struct{}
 
 type Group struct {
@@ -31,38 +30,56 @@ type Group struct {
 
 type Client struct {
 	name      string
+	group     string
 	ch        chan pb.ChatMessage
 	WaitGroup *sync.WaitGroup
 }
 
-func AddGroup(n string) *Group {
+var lock = &sync.RWMutex{}
+var clients map[string]Client
+var groups map[string]Group
 
-	g := &Group{
+// AddClient adds a new client n to the server.
+// It doesn't return anything.
+func AddClient(n string) {
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	c := Client{
 		name:      n,
 		ch:        make(chan pb.ChatMessage, 100),
 		WaitGroup: &sync.WaitGroup{},
 	}
 
-	g.WaitGroup.Add(1)
-	return g
-
+	log.Print("[AddClient]: Registered client " + n)
+	clients[n] = c
 }
 
-// Clients: A list of unique clients and a channel per client.
-// Groups: A list of unique groups and a channel per group.
-// GroupClients: A list of Groups and a list of all clients in that group.
-// Note: Messages within a group are sent to that group's channel and then routed
-//       to each client channel who is part of that group EXCEPT the sender's channel.
-var clients = make(map[string]chan pb.ChatMessage, 100)
-var groups = make(map[string]chan pb.ChatMessage, 100)
-var groupClients = make(map[string][]string)
+// AddGroup adds a new group to the server.
+// It doesn't return anything.
+func AddGroup(n string) {
 
-var lock = &sync.RWMutex{}
+	lock.Lock()
+	defer lock.Unlock()
+
+	g := Group{
+		name:      n,
+		ch:        make(chan pb.ChatMessage, 100),
+		WaitGroup: &sync.WaitGroup{},
+	}
+
+	log.Print("[AddGroup]: Added group " + g.name)
+	groups[n] = g
+	groups[n].WaitGroup.Add(1)
+}
 
 // ClientExists checks if a client exists on the server.
 // It returns a bool value.
 func ClientExists(name string) bool {
 
+	lock.RLock()
+	defer lock.RUnlock()
 	for c := range clients {
 		if c == name {
 			return true
@@ -76,9 +93,8 @@ func ClientExists(name string) bool {
 // It returns a bool value.
 func GroupExists(gName string) bool {
 
-	// Changed to just LOCK
-	lock.Lock()
-	defer lock.Unlock()
+	lock.RLock()
+	defer lock.RUnlock()
 	for g := range groups {
 		if g == gName {
 			return true
@@ -91,38 +107,17 @@ func GroupExists(gName string) bool {
 // InGroup checks whether a client is currently in a
 // specific group.
 // It returns a bool value.
-func InGroup(name string) bool {
+func InGroup(n string) bool {
 
-	for _, c := range groupClients {
-		for _, s := range c {
-			if name == s {
+	for _, g := range groups {
+		for _, c := range g.clients {
+			if n == c {
 				return true
 			}
 		}
 	}
 
 	return false
-
-}
-
-// AddClient adds a new client to the server.
-// It doesn't return anything.
-func AddClient(name string) {
-
-	clients[name] = make(chan pb.ChatMessage, 100)
-	log.Print("[AddClient]: Registered client " + name)
-	log.Print("[AddClient]: Client's channel: ")
-	log.Print(clients[name])
-}
-
-// AddGroup adds a new group to the server.
-// It doesn't return anything.
-func AddGroup(gName string) {
-
-	lock.Lock()
-	defer lock.Unlock()
-	groups[gName] = make(chan pb.ChatMessage, 100)
-	log.Print("[AddGroup]: Added group " + gName)
 }
 
 // RemoveClient will remove a client from the server as well as any
