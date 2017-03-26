@@ -70,12 +70,14 @@ func AddGroup(n string) {
 
 	log.Print("[AddGroup]: Added group " + g.name)
 	groups[n] = g
-	groups[n].WaitGroup.Add(1)
+	//groups[n].WaitGroup.Add(1)
 }
 
 // ClientExists checks if a client exists on the server.
 // It returns a bool value.
 func ClientExists(n string) bool {
+
+	log.Print("[ClientExists]: Check if " + n + " exists.")
 
 	lock.RLock()
 	defer lock.RUnlock()
@@ -108,6 +110,8 @@ func GroupExists(gName string) bool {
 // It returns a bool value.
 func InGroup(n string) bool {
 
+	lock.RLock()
+	defer lock.RUnlock()
 	for _, g := range groups {
 		for _, c := range g.clients {
 			if n == c {
@@ -122,26 +126,26 @@ func InGroup(n string) bool {
 // RemoveClient will remove a client from the server as well as any
 // groups that they are currently in.
 // It returns an error.
-func RemoveClient(name string) error {
+func RemoveClient(n string) error {
 
-	// TODO: There is some deadlock here when a user attempts to quit
-	// 		 the chat app with !exit.
+	//lock.Lock()
+	//defer lock.Unlock()
 
-	lock.Lock()
-	defer lock.Unlock()
-
-	if ClientExists(name) {
-		delete(clients, name)
-		log.Print("[RemoveClient]: Removed client " + name)
-		if InGroup(name) {
-			RemoveClientFromGroup(name)
-		} else {
-			log.Print("[RemoveClient]: " + name + " was not in any groups.")
-			return nil
+	if ClientExists(n) {
+		if InGroup(n) {
+			lock.Lock()
+			defer lock.Unlock()
+			log.Print("[RemoveClient]: Removed client " + n + " from their group(s).")
+			RemoveClientFromGroup(n)
 		}
+
+		delete(clients, n)
+		log.Print("[RemoveClient]: Removed client " + n)
+
+		return nil
 	}
 
-	return errors.New("[RemoveClient]: Client (" + name + ") doesn't exist")
+	return errors.New("[RemoveClient]: Client (" + n + ") doesn't exist")
 }
 
 // AddClientToGroup will add a client to a group.
@@ -157,7 +161,7 @@ func AddClientToGroup(c string, g string) {
 	groups[g].clients = append(groups[g].clients, c)
 	clients[c].groups = append(clients[c].groups, g)
 
-	log.Println("[AddClientToGroup] Added " + c + " to " + g)
+	log.Println("[AddClientToGroup]: Added " + c + " to " + g)
 }
 
 // RemoveClientFromGroup will remove a client from a specific group. It will also
@@ -168,6 +172,7 @@ func RemoveClientFromGroup(n string) error {
 	for _, g := range groups {
 		for i, c := range g.clients {
 			if n == c {
+				log.Println("[RemoveClientFromGroup]: Removing client " + n + " from " + g.name)
 				c := clients[n].groups
 				// Remove the group from the user.
 				for i, _ := range c {
@@ -286,7 +291,7 @@ func (s *server) CreateGroup(ctx context.Context, in *pb.GroupInfo) (*pb.Empty, 
 	cName := in.Client
 	gName := in.GroupName
 
-	log.Printf("[CreateGroup] " + cName + " is attempting to create " + gName)
+	log.Printf("[CreateGroup]: " + cName + " is attempting to create " + gName)
 
 	if !GroupExists(gName) {
 		AddGroup(gName)
@@ -354,10 +359,8 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		case outMsg := <-outbox:
 			Broadcast(msg.Receiver, outMsg)
 		case inMsg := <-clients[msg.Sender].ch:
-			log.Println("Sending message to channel: ")
+			log.Println("[RouteChat]: Sending message to channel: ")
 			log.Println(clients[msg.Sender])
-			log.Println("[LOOK HERE]: Sending message to STREAM: ")
-			log.Println(stream)
 			stream.Send(&inMsg)
 		}
 	}

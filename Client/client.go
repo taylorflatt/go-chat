@@ -81,24 +81,16 @@ func (m *Monitor) ControlExit(c pb.ChatClient, u string, g string) {
 			if m.chatting {
 				log.Print("[ControlExit]: I am chatting.")
 				m.stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
-				ExitClient(c, u, g)
+				c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
 				return
 			}
 
 			log.Print("[ControlExit]: I am NOT chatting.")
-			ExitClient(c, u, g)
+			c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
 			os.Exit(1)
 			return
 		}
 	}
-}
-
-// ExitClient handles removing the client from the server and exiting the program.
-// It doesn't return anything.
-func ExitClient(c pb.ChatClient, u string, g string) {
-
-	c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
-	os.Exit(1)
 }
 
 // ListenToClient listens to the client for input and adds that input to the sQueue with
@@ -167,7 +159,8 @@ func main() {
 	var uName string // Client username
 	var gName string // Client's chat group
 
-	a := SetServer(r)
+	//a := SetServer(r)
+	a := "localhost:12021"
 
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(a, grpc.WithInsecure())
@@ -255,7 +248,7 @@ func Chat(conn *grpc.ClientConn, stream pb.Chat_RouteChatClient, c pb.ChatClient
 			case "!exit":
 				log.Println("[Main]: I'm in !exit.")
 				stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
-				ExitClient(c, u, g)
+				c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
 				//stream.CloseSend()
 				//cancel()
 				conn.Close()
@@ -283,7 +276,4 @@ func Chat(conn *grpc.ClientConn, stream pb.Chat_RouteChatClient, c pb.ChatClient
 			}
 		}
 	}
-	//}
-
-	//return false
 }
