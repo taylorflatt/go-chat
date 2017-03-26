@@ -1,15 +1,23 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	"os/exec"
+	"runtime"
 	"sync"
 
 	pb "github.com/taylorflatt/go-chat"
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -52,6 +60,8 @@ func AddClient(n string) {
 	}
 
 	log.Print("[AddClient]: Registered client " + n)
+	log.Println("[AddClient]: Client has: ")
+	log.Print(c)
 	clients[n] = c
 }
 
@@ -359,8 +369,8 @@ func (s *server) RouteChat(stream pb.Chat_RouteChatServer) error {
 		case outMsg := <-outbox:
 			Broadcast(msg.Receiver, outMsg)
 		case inMsg := <-clients[msg.Sender].ch:
-			log.Println("[RouteChat]: Sending message to channel: ")
-			log.Println(clients[msg.Sender])
+			log.Println("[RouteChat]: Sending message( " + inMsg.Message + ") to channel: ")
+			log.Println(clients[msg.Sender].ch)
 			stream.Send(&inMsg)
 		}
 	}
@@ -409,7 +419,40 @@ func ListenToClient(stream pb.Chat_RouteChatServer, messages chan<- pb.ChatMessa
 	}
 }
 
+var (
+	crt = "server.crt"
+	key = "server.key"
+	ca  = "ca.crt"
+)
+
 func main() {
+
+	if _, err := os.Stat(key); os.IsNotExist(err) {
+		if runtime.GOOS == "linux" {
+			cmd := "openssl"
+			args := []string{"req", "-x509", "-nodes", "-newkey rsa:2048", "-server.key", "-out server.crt", "-days 3650", "-subj \"/C=US/ST=Carbondale/O=Go Chat/OU=Application/CN=gochat.com\""}
+
+			exec.Command(cmd, args...)
+		} else {
+			panic("cannot find key for the server. generate a self-signed one or add one into the cwd of the server.")
+		}
+	}
+
+	certificate, err := tls.LoadX509KeyPair(crt, key)
+	if err != nil {
+		fmt.Errorf("could not load server key pair: %s", err)
+	}
+
+	// Need a proper crt from a CA here. Using the self-signed server crt as a stand-in.
+	certPool := x509.NewCertPool()
+	ca, err := ioutil.ReadFile(crt)
+	if err != nil {
+		log.Print("could not read ca certificate: %s", err)
+	}
+
+	if ok := certPool.AppendCertsFromPEM(ca); !ok {
+		errors.New("failed to append client certs")
+	}
 
 	lis, err := net.Listen("tcp", port)
 
@@ -417,8 +460,15 @@ func main() {
 		log.Fatalf("Failed to listen %v", err)
 	}
 
+	// Create creds used for the server.
+	creds := credentials.NewTLS(&tls.Config{
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: []tls.Certificate{certificate},
+		ClientCAs:    certPool,
+	})
+
 	// Initializes the gRPC server.
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.Creds(creds))
 
 	// Register the server with gRPC.
 	pb.RegisterChatServer(s, &server{})

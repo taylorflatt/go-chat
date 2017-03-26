@@ -14,6 +14,12 @@ import (
 	pb "github.com/taylorflatt/go-chat"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+)
+
+var (
+	crt = "server.crt"
+	key = "server.key"
 )
 
 type Watcher struct {
@@ -162,8 +168,9 @@ func main() {
 	//a := SetServer(r)
 	a := "localhost:12021"
 
+	creds, _ := credentials.NewClientTLSFromFile("roots.pem", "")
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(a, grpc.WithInsecure())
+	conn, err := grpc.Dial(a, grpc.WithTransportCredentials(creds))
 
 	if err != nil {
 		log.Fatalf("Could not connect: %v", err)
@@ -195,23 +202,14 @@ func main() {
 			os.Exit(1)
 		}
 
-		log.Print("Showing context")
-		log.Print(ctx)
 		showMenu = Chat(conn, stream, c, m, r, uName, gName)
 	}
 }
 
 func Chat(conn *grpc.ClientConn, stream pb.Chat_RouteChatClient, c pb.ChatClient, m *Monitor, r *bufio.Reader, u string, g string) bool {
 
-	//t, cancel := context.WithCancel(ctx)
-	//stream, serr := c.RouteChat(t)
-	//defer cancel()
-
 	DisplayCurrentMembers(c, g)
 
-	//if serr != nil {
-	//	fmt.Print(serr)
-	//} else {
 	sQueue := CreateWatcher() // Creates the sQueue with a channel and waitgroup.
 	inbox := CreateWatcher()  // Similar to sQueue
 
@@ -233,34 +231,29 @@ func Chat(conn *grpc.ClientConn, stream pb.Chat_RouteChatClient, c pb.ChatClient
 		case toSend := <-sQueue.ch:
 			switch msg := strings.TrimSpace(toSend.Message); msg {
 			case "!members":
-				log.Println("[Main]: I'm in !members.")
 				DisplayCurrentMembers(c, g)
 			case "!leave":
-				log.Println("[Main]: I'm in !leave.")
 				c.LeaveRoom(context.Background(), &pb.GroupInfo{Client: u, GroupName: g})
 				sQueue.Stop()
 				inbox.Stop()
-				//stream.CloseSend()
-				log.Println("HEY LOOK")
-				//cancel()
 				log.Println(context.Canceled)
 				return true
 			case "!exit":
-				log.Println("[Main]: I'm in !exit.")
 				stream.Send(&pb.ChatMessage{Sender: u, Receiver: g, Message: u + " left chat!\n"})
 				c.UnRegister(context.Background(), &pb.ClientInfo{Sender: u})
-				//stream.CloseSend()
-				//cancel()
 				conn.Close()
 				return false
 			case "!help":
-				log.Println("[Main]: I'm in !help.")
 				AddSpacing(1)
 				fmt.Println("The following commands are available to you: ")
 				color.New(color.FgHiYellow).Print("   !members")
 				fmt.Print(": Lists the current members in the group.")
-
 				AddSpacing(1)
+
+				color.New(color.FgHiYellow).Print("   !leave")
+				fmt.Println(": Leaves the chat group.")
+				AddSpacing(1)
+
 				color.New(color.FgHiYellow).Print("   !exit")
 				fmt.Println(": Leaves the chat server.")
 				AddSpacing(1)
