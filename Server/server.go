@@ -30,7 +30,7 @@ type Group struct {
 
 type Client struct {
 	name      string
-	group     string
+	groups    []string
 	ch        chan pb.ChatMessage
 	WaitGroup *sync.WaitGroup
 }
@@ -154,7 +154,7 @@ func AddClientToGroup(c string, g string) {
 	defer groups[g].WaitGroup.Done()
 
 	groups[g].clients = append(groups[g].clients, c)
-	clients[c].group = g
+	clients[c].groups = append(clients[c].groups, g)
 
 	log.Println("[AddClientToGroup] Added " + c + " to " + g)
 }
@@ -167,8 +167,16 @@ func RemoveClientFromGroup(n string) error {
 	for _, g := range groups {
 		for i, c := range g.clients {
 			if n == c {
+				c := clients[n].groups
+				// Remove the group from the user.
+				for i, gn := range c {
+					if n == g.name {
+						c[i] = c[len(c)-1]
+						c = c[:len(c)-1]
+						clients[n].groups = c
+					}
+				}
 				if len(g.clients) == 1 {
-					clients[n].group = ""
 					delete(groups, g.name)
 				} else {
 					c := g.clients
@@ -176,36 +184,6 @@ func RemoveClientFromGroup(n string) error {
 					c = c[:len(c)-1]
 					g.clients = c
 				}
-
-				return nil
-			}
-		}
-
-	}
-
-	// Look through all the groups.
-	for gName, cList := range groupClients {
-		listG := cList
-		// Look through all the users in the group.
-		for i, cName := range listG {
-			// Remove the user from the group.
-			if cName == name {
-				log.Println("[RemoveClientFromGroup]: Removed client " + name + " from " + gName)
-				if len(listG) == 1 {
-					delete(groups, gName)
-					delete(groupClients, gName)
-					log.Println("[RemoveClientFromGroup]: No more members in " + gName + ", removing the group.")
-					log.Print("List of groups: ")
-					for keys := range groups {
-						log.Print(keys)
-					}
-				} else {
-					listG[i] = listG[len(listG)-1]
-					listG = listG[:len(listG)-1]
-					groupClients[gName] = listG
-					log.Print(listG)
-				}
-
 				return nil
 			}
 		}
@@ -218,12 +196,15 @@ func RemoveClientFromGroup(n string) error {
 // It returns a list of connected clients.
 func (s *server) GetClientList(ctx context.Context, in *pb.Empty) (*pb.ClientList, error) {
 
-	var conClients []string
+	var c []string
 	for key := range clients {
-		conClients = append(conClients, key)
+		c = append(c, key)
 	}
 
-	return &pb.ClientList{Clients: conClients}, nil
+	log.Print("[GetClientList]: Returned list of current groups ")
+	log.Print(c)
+
+	return &pb.ClientList{Clients: c}, nil
 }
 
 // GetGroupList will get all of the groups currently registered on the server.
@@ -245,18 +226,18 @@ func (s *server) GetGroupList(ctx context.Context, in *pb.Empty) (*pb.GroupList,
 // It returns a list of clients belonging to a group.
 func (s *server) GetGroupClientList(ctx context.Context, in *pb.GroupInfo) (*pb.ClientList, error) {
 
-	gName := in.GroupName
+	g := in.GroupName
 
-	if !GroupExists(gName) {
+	if !GroupExists(g) {
 		return &pb.ClientList{}, errors.New("that group doesn't exist")
 	}
 
-	cList := groupClients[gName]
+	lst := groups[g].clients
 
-	log.Print("[GetGroupClientList]: For group " + gName + " returned members ")
-	log.Print(cList)
+	log.Print("[GetGroupClientList]: For group " + g + " returned members ")
+	log.Print(lst)
 
-	return &pb.ClientList{Clients: cList}, nil
+	return &pb.ClientList{Clients: lst}, nil
 }
 
 // Register will add the user to the server's collection of users (and by extension restrict the username).
