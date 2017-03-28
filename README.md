@@ -21,7 +21,5 @@ To run navigate the client:
 * This client/server assumes a 12021 server port. This can be changed in the server.go file near the top.
 
 ## Future Ideas
-* The !leave function to leave a chat and go back to the main menu.
-* Encryption on chat channels.
+* Encryption on chat channels. (In progress)
 * Ability to send files.
-* Complete server re-write to be more extendible and understandable.
